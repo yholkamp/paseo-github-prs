@@ -1,0 +1,9 @@
+{
+  "id": "github-prs",
+  "name": "GitHub PRs",
+  "description": "Overview of your open pull requests and the PRs waiting for your review",
+  "media": [],
+  "requirements": {
+    "paseo": ">=0.13.0"
+  }
+}
