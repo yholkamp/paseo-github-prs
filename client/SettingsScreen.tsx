@@ -14,7 +14,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { Text } from "react-native";
 import { type AuthStatus, clearToken, getAuthStatus, saveToken } from "../shared/rpc";
-import { DEFAULT_READY_PATTERN, DEFAULT_REVIEW_QUERIES, isValidPattern, preferences } from "../shared/settings";
+import {
+  DEFAULT_READY_PATTERN,
+  DEFAULT_REVIEW_PROMPT,
+  DEFAULT_REVIEW_PROVIDER,
+  DEFAULT_REVIEW_QUERIES,
+  isValidPattern,
+  preferences,
+} from "../shared/settings";
 import { AUTH_KEY, MENTIONS_KEY, OVERVIEW_KEY } from "./data";
 
 type Preferences = ReturnType<typeof preferences.schema.parse>;
@@ -221,6 +228,32 @@ function PreferencesForm({
             hint="Skips comments from bot accounts such as the review bot."
             value={draft.mentionsHideBots}
             onValueChange={(mentionsHideBots) => setDraft({ ...draft, mentionsHideBots })}
+          />
+        </SettingsCard>
+      </SettingsSection>
+
+      <SettingsSection title="Code review">
+        <SettingsCard>
+          <SettingsInput
+            label="Agent model"
+            hint="Provider and model for the review agent, as provider/model."
+            initialValue={values.reviewProvider}
+            placeholder={DEFAULT_REVIEW_PROVIDER}
+            onChangeText={(text) => setDraft({ ...draft, reviewProvider: text.trim() || DEFAULT_REVIEW_PROVIDER })}
+          />
+          <SettingsInput
+            label="Review prompt"
+            hint="First message sent to the review agent. Placeholders: {number}, {branch}, {base}, {repo}, {url}, {title}."
+            initialValue={values.reviewPrompt}
+            placeholder={DEFAULT_REVIEW_PROMPT}
+            onChangeText={(text) => setDraft({ ...draft, reviewPrompt: text.trim() ? text : DEFAULT_REVIEW_PROMPT })}
+          />
+          <SettingsInput
+            label="Clone folder"
+            hint="Where repositories without a local checkout are cloned. When empty, they are cloned next to another checkout from the same GitHub owner."
+            initialValue={values.cloneDirectory}
+            placeholder="~/workspace"
+            onChangeText={(cloneDirectory) => setDraft({ ...draft, cloneDirectory })}
           />
         </SettingsCard>
       </SettingsSection>

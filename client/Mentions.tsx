@@ -1,10 +1,10 @@
 import type { PluginTheme } from "@getpaseo/plugin";
-import { openExternalUrl, useRpc } from "@getpaseo/plugin/client";
+import { useRpc } from "@getpaseo/plugin/client";
 import { Icon, useToast } from "@getpaseo/plugin/client/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pressable, Text, View } from "react-native";
 import { type Mention, type Mentions, setMentionsDone } from "../shared/rpc";
-import { Badge, CollapsibleSection, type Styles } from "./components";
+import { Badge, CollapsibleSection, type Styles, useOpenUrl } from "./components";
 import { MENTION_SECTIONS, MENTIONS_KEY, timeAgo } from "./data";
 
 const ACTIONS: Record<Mention["kind"], string> = {
@@ -52,13 +52,14 @@ function MentionCard({
   styles: Styles;
   onToggleDone(): void;
 }) {
+  const openUrl = useOpenUrl();
   const { target } = mention;
   const done = mention.section === "done";
   return (
     <Pressable
       accessibilityRole="link"
       accessibilityLabel={`@${mention.author} ${ACTIONS[mention.kind]} on ${target.repo} ${target.number}`}
-      onPress={() => void openExternalUrl(mention.url)}
+      onPress={() => openUrl(mention.url)}
       style={({ pressed }) => [styles.card, pressed ? styles.cardPressed : null]}
     >
       <View style={styles.meta}>

@@ -109,6 +109,9 @@ export function describe(pr: RawPullRequest, rules: ReviewRules): Base {
     author: pr.author?.login ?? "ghost",
     isDraft: pr.isDraft,
     updatedAt: pr.updatedAt,
+    headRefName: pr.headRefName,
+    baseRefName: pr.baseRefName,
+    isCrossRepository: pr.isCrossRepository,
     ...ciSummary(pr),
     reviewDecision:
       pr.reviewDecision === "APPROVED"

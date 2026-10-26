@@ -22,6 +22,9 @@ export const pullRequest = z.object({
   author: z.string(),
   isDraft: z.boolean(),
   updatedAt: z.string(),
+  headRefName: z.string(),
+  baseRefName: z.string(),
+  isCrossRepository: z.boolean(),
   ci: ciState,
   failingChecks: z.array(z.string()),
   pendingChecks: z.number(),
@@ -103,6 +106,48 @@ export const setMentionsDone = defineRpc({
   name: "github.mentions.done",
   input: z.object({ ids: z.array(z.string()).min(1), done: z.boolean() }),
   output: z.object({ ok: z.boolean() }),
+});
+
+export const reviewTarget = z.object({
+  repo: z.string(),
+  number: z.number(),
+  title: z.string(),
+  url: z.string(),
+  headRefName: z.string(),
+  baseRefName: z.string(),
+  isCrossRepository: z.boolean(),
+});
+
+export type ReviewTarget = z.infer<typeof reviewTarget>;
+
+export const reviewJob = z.object({
+  id: z.string(),
+  key: z.string(),
+  state: z.enum(["running", "done", "failed"]),
+  step: z.string(),
+  workspaceId: z.string().nullable(),
+  agentId: z.string().nullable(),
+  reusedWorkspace: z.boolean(),
+  error: z.string().nullable(),
+  warnings: z.array(z.string()),
+});
+
+export type ReviewJob = z.infer<typeof reviewJob>;
+
+export function reviewKey(repo: string, number: number): string {
+  return `${repo.toLowerCase()}#${number}`;
+}
+
+export const startReview = defineRpc({
+  name: "github.review.start",
+  input: reviewTarget,
+  output: z.object({ jobId: z.string() }),
+});
+
+export const listReviewJobs = defineRpc({
+  name: "github.review.jobs",
+  input: z.object({}),
+  output: z.object({ jobs: z.array(reviewJob) }),
 });
 
 export const getAuthStatus = defineRpc({

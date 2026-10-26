@@ -1,10 +1,10 @@
 import type { PluginTheme } from "@getpaseo/plugin";
-import { openExternalUrl, type PluginScreenProps } from "@getpaseo/plugin/client";
+import type { PluginScreenProps } from "@getpaseo/plugin/client";
 import { Icon, Loading } from "@getpaseo/plugin/client/ui";
 import { useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import type { PullRequest } from "../shared/rpc";
-import { Badge, CollapsibleSection, type Styles, type Tone, useStyles } from "./components";
+import { Badge, CollapsibleSection, type Styles, type Tone, useOpenUrl, useStyles } from "./components";
 import {
   mentionCount,
   MY_SECTIONS,
@@ -16,6 +16,7 @@ import {
   useOverview,
 } from "./data";
 import { MentionsList } from "./Mentions";
+import { type Reviews, useReviews } from "./review";
 
 type Tab = "reviews" | "mine" | "mentions";
 
@@ -57,12 +58,44 @@ function badgesFor(pr: PullRequest, tab: Tab): BadgeSpec[] {
   return badges;
 }
 
-function PullRequestCard({ pr, tab, theme, styles }: { pr: PullRequest; tab: Tab; theme: PluginTheme; styles: Styles }) {
+function ReviewButton({ pr, reviews, theme, styles }: { pr: PullRequest; reviews: Reviews; theme: PluginTheme; styles: Styles }) {
+  const job = reviews.jobFor(pr);
+  const running = job?.state === "running";
+  const done = job?.state === "done" && !!job.agentId;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={done ? `Open code review of pull request ${pr.number}` : `Start code review of pull request ${pr.number}`}
+      accessibilityState={{ busy: running, disabled: running }}
+      disabled={running}
+      onPress={() => (done ? reviews.open(job) : reviews.start(pr))}
+      style={styles.smallButton}
+    >
+      <Icon name={running ? "Loader" : done ? "Bot" : "ScanSearch"} size={12} color={theme.colors.foreground} />
+      <Text style={styles.smallButtonText}>{running ? `${job.step}…` : done ? "Open review" : "Review"}</Text>
+    </Pressable>
+  );
+}
+
+function PullRequestCard({
+  pr,
+  tab,
+  reviews,
+  theme,
+  styles,
+}: {
+  pr: PullRequest;
+  tab: Tab;
+  reviews: Reviews;
+  theme: PluginTheme;
+  styles: Styles;
+}) {
+  const openUrl = useOpenUrl();
   return (
     <Pressable
       accessibilityRole="link"
       accessibilityLabel={`${pr.repo} pull request ${pr.number}: ${pr.title}`}
-      onPress={() => void openExternalUrl(pr.url)}
+      onPress={() => openUrl(pr.url)}
       style={({ pressed }) => [styles.card, pressed ? styles.cardPressed : null]}
     >
       <View style={styles.meta}>
@@ -76,10 +109,18 @@ function PullRequestCard({ pr, tab, theme, styles }: { pr: PullRequest; tab: Tab
       <Text style={styles.title} numberOfLines={2}>
         {pr.title}
       </Text>
-      <View style={styles.badges}>
-        {badgesFor(pr, tab).map((badge) => (
-          <Badge key={badge.label} {...badge} theme={theme} styles={styles} />
-        ))}
+      <View style={styles.meta}>
+        <View style={[styles.badges, { flexShrink: 1 }]}>
+          {badgesFor(pr, tab).map((badge) => (
+            <Badge key={badge.label} {...badge} theme={theme} styles={styles} />
+          ))}
+        </View>
+        {tab === "reviews" ? (
+          <>
+            <View style={styles.metaSpacer} />
+            <ReviewButton pr={pr} reviews={reviews} theme={theme} styles={styles} />
+          </>
+        ) : null}
       </View>
     </Pressable>
   );
@@ -89,12 +130,14 @@ function PullRequestList({
   prs,
   sections,
   tab,
+  reviews,
   theme,
   styles,
 }: {
   prs: PullRequest[];
   sections: SectionInfo<string>[];
   tab: Tab;
+  reviews: Reviews;
   theme: PluginTheme;
   styles: Styles;
 }) {
@@ -117,7 +160,7 @@ function PullRequestList({
             styles={styles}
           >
             {items.map((pr) => (
-              <PullRequestCard key={pr.id} pr={pr} tab={tab} theme={theme} styles={styles} />
+              <PullRequestCard key={pr.id} pr={pr} tab={tab} reviews={reviews} theme={theme} styles={styles} />
             ))}
           </CollapsibleSection>
         );
@@ -130,8 +173,9 @@ function initialTab(value: string | undefined): Tab {
   return value === "mine" || value === "mentions" ? value : "reviews";
 }
 
-export function PullRequestsScreen({ theme, layout, params, openSettings }: Props) {
+export function PullRequestsScreen({ theme, layout, params, navigation, openSettings }: Props) {
   const styles = useStyles(theme, layout.compact);
+  const reviews = useReviews(navigation);
   const [tab, setTab] = useState<Tab>(initialTab(params.tab));
   const overview = useOverview();
   const mentions = useMentions();
@@ -215,6 +259,7 @@ export function PullRequestsScreen({ theme, layout, params, openSettings }: Prop
           prs={tab === "mine" ? overview.data.mine : overview.data.reviews}
           sections={tab === "mine" ? MY_SECTIONS : REVIEW_SECTIONS}
           tab={tab}
+          reviews={reviews}
           theme={theme}
           styles={styles}
         />

@@ -28,6 +28,9 @@ export interface RawPullRequest {
   isDraft: boolean;
   updatedAt: string;
   headRefOid: string;
+  headRefName: string;
+  baseRefName: string;
+  isCrossRepository: boolean;
   mergeable: "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
   reviewDecision: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | null;
   repository: { nameWithOwner: string };
@@ -49,7 +52,7 @@ export interface RawPullRequest {
 
 const PR_FIELDS = `
 fragment PrFields on PullRequest {
-  id number title url isDraft updatedAt headRefOid mergeable reviewDecision
+  id number title url isDraft updatedAt headRefOid headRefName baseRefName isCrossRepository mergeable reviewDecision
   repository { nameWithOwner }
   author { login }
   latestOpinionatedReviews(first: 30) { nodes { state } }
@@ -73,9 +76,60 @@ fragment PrFields on PullRequest {
   }
 }`;
 
+interface GraphQLError {
+  message: string;
+  path?: Array<string | number>;
+}
+
 interface GraphQLResponse<T> {
   data?: T | null;
-  errors?: Array<{ message: string }>;
+  errors?: GraphQLError[];
+}
+
+const CHECKS_HINT =
+  "Needs Commit statuses: read. Fine-grained tokens have no Checks permission, so check runs may need a classic token with the repo scope.";
+
+const PERMISSION_HINTS: Record<string, string> = {
+  statusCheckRollup: CHECKS_HINT,
+  contexts: CHECKS_HINT,
+  commits: "Needs Contents: read.",
+  mergeable: "Needs Contents: read.",
+  reviews: "Needs Pull requests: read.",
+  reviewThreads: "Needs Pull requests: read.",
+  latestOpinionatedReviews: "Needs Pull requests: read.",
+};
+
+export function describeErrors(errors: GraphQLError[], data: unknown): string[] {
+  const groups = new Map<string, { message: string; field: string | null; item: boolean; repos: Set<string> }>();
+  for (const error of errors) {
+    const path = error.path ?? [];
+    let node: unknown = data;
+    let repo: string | null = null;
+    for (const segment of path) {
+      node = node && typeof node === "object" ? (node as Record<string | number, unknown>)[segment] : undefined;
+      const name = (node as { repository?: { nameWithOwner?: string } } | undefined)?.repository?.nameWithOwner;
+      if (name) repo = name;
+    }
+    const names = path.filter((segment): segment is string => typeof segment === "string" && segment !== "nodes");
+    const last = names[names.length - 1];
+    const field = last && !/^(q\d+|search|viewer)$/.test(last) ? last : null;
+    const key = `${error.message}|${field}`;
+    const group = groups.get(key) ?? { message: error.message, field, item: !field && path.length > 0, repos: new Set<string>() };
+    if (repo) group.repos.add(repo);
+    groups.set(key, group);
+  }
+  return [...groups.values()].map(({ message, field, item, repos }) => {
+    const list = [...repos];
+    const where = list.length
+      ? ` in ${list.slice(0, 3).join(", ")}${list.length > 3 ? ` and ${list.length - 3} more` : ""}`
+      : "";
+    const hint = field
+      ? PERMISSION_HINTS[field]
+      : item
+        ? "Some results are in repositories the token does not cover, such as another organization's."
+        : undefined;
+    return `${message}${field ? ` (field ${field}${where})` : where ? ` (${where.trim()})` : ""}${hint ? ` ${hint}` : ""}`;
+  });
 }
 
 export class GitHubError extends Error {}
@@ -105,7 +159,7 @@ async function graphql<T>(
     throw new GitHubError(`GitHub returned ${response.status}: ${detail.slice(0, 300)}`);
   }
   const payload = (await response.json()) as GraphQLResponse<T>;
-  const warnings = [...new Set((payload.errors ?? []).map((error) => error.message))];
+  const warnings = describeErrors(payload.errors ?? [], payload.data);
   if (!payload.data) {
     throw new GitHubError(warnings.join("\n") || "GitHub returned no data.");
   }

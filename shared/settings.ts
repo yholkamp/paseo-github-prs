@@ -3,6 +3,9 @@ import { z } from "zod";
 
 export const DEFAULT_READY_PATTERN = "ready for (a |human |another )?review";
 
+export const DEFAULT_REVIEW_PROVIDER = "claude/claude-opus-5-5";
+export const DEFAULT_REVIEW_PROMPT = "/code-review high {branch}";
+
 export const DEFAULT_REVIEW_QUERIES = ["review-requested:@me", "reviewed-by:@me"];
 
 export const preferences = defineSettings({
@@ -18,6 +21,9 @@ export const preferences = defineSettings({
     mentionDays: z.number().int().min(1).max(90).default(14),
     mentionsIncludeClosed: z.boolean().default(false),
     mentionsHideBots: z.boolean().default(true),
+    reviewProvider: z.string().default(DEFAULT_REVIEW_PROVIDER),
+    reviewPrompt: z.string().default(DEFAULT_REVIEW_PROMPT),
+    cloneDirectory: z.string().default(""),
   }),
 });
 

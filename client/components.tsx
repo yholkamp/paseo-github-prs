@@ -1,5 +1,6 @@
 import type { PluginTheme } from "@getpaseo/plugin";
-import { Icon } from "@getpaseo/plugin/client/ui";
+import { openExternalUrl } from "@getpaseo/plugin/client";
+import { copyText, Icon, useToast } from "@getpaseo/plugin/client/ui";
 import { type ReactNode, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
@@ -92,6 +93,24 @@ export function useStyles(theme: PluginTheme, compact: boolean) {
 }
 
 export type Styles = ReturnType<typeof useStyles>;
+
+export function useOpenUrl(): (url: string) => void {
+  const toast = useToast();
+  return (url) => {
+    const fail = (error: unknown) => {
+      const reason = error instanceof Error ? error.message : String(error);
+      copyText(url).then(
+        () => toast.error(`Could not open your browser (${reason}). Link copied to the clipboard.`),
+        () => toast.error(`Could not open your browser (${reason}).`),
+      );
+    };
+    try {
+      openExternalUrl(url).catch(fail);
+    } catch (error) {
+      fail(error);
+    }
+  };
+}
 
 export function toneColor(theme: PluginTheme, tone: Tone): string {
   switch (tone) {

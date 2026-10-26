@@ -2,8 +2,18 @@ import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { fetchViewer } from "./server/github";
 import { loadMentions, markMentionsDone } from "./server/mentions";
 import { authStatus, loadOverview } from "./server/overview";
+import { currentReviewJobs, startReviewJob } from "./server/review";
 import { deleteStoredToken, storeToken } from "./server/token";
-import { clearToken, getAuthStatus, getMentions, getOverview, saveToken, setMentionsDone } from "./shared/rpc";
+import {
+  clearToken,
+  getAuthStatus,
+  getMentions,
+  getOverview,
+  listReviewJobs,
+  saveToken,
+  setMentionsDone,
+  startReview,
+} from "./shared/rpc";
 import { preferences } from "./shared/settings";
 
 export default function contribute(server: PluginServerContext) {
@@ -12,6 +22,8 @@ export default function contribute(server: PluginServerContext) {
   server.handle(getOverview, () => loadOverview(settings));
   server.handle(getMentions, () => loadMentions(settings));
   server.handle(setMentionsDone, ({ ids, done }) => markMentionsDone(ids, done));
+  server.handle(startReview, (target, { paseo }) => startReviewJob(target, paseo, settings));
+  server.handle(listReviewJobs, () => ({ jobs: currentReviewJobs() }));
   server.handle(getAuthStatus, () => authStatus());
   server.handle(saveToken, async ({ token }) => {
     await fetchViewer(token.trim());
