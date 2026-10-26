@@ -21,7 +21,8 @@ export async function authStatus(): Promise<AuthStatus> {
   const resolved = await resolveToken();
   if (!resolved) return { source: "none", login: null, error: null };
   try {
-    return { source: resolved.source, login: await fetchViewer(resolved.token), error: null };
+    const { login, warnings } = await fetchViewer(resolved.token);
+    return { source: resolved.source, login, error: warnings.length ? warnings.join(" ") : null };
   } catch (error) {
     return { source: resolved.source, login: null, error: String((error as Error).message ?? error) };
   }

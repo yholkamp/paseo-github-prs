@@ -99,6 +99,24 @@ const PERMISSION_HINTS: Record<string, string> = {
   latestOpinionatedReviews: "Needs Pull requests: read.",
 };
 
+function accessWarnings(headers: Headers): string[] {
+  const warnings: string[] = [];
+  const scopes = headers.get("x-oauth-scopes");
+  if (scopes !== null && !scopes.split(",").some((scope) => scope.trim() === "repo")) {
+    warnings.push(
+      "The token does not have the repo scope, so pull requests in private repositories are not shown. Enable the top-level repo scope on the token.",
+    );
+  }
+  const sso = headers.get("x-github-sso");
+  if (sso?.includes("partial-results")) {
+    const orgs = /organizations=([^;]+)/.exec(sso)?.[1];
+    warnings.push(
+      `Results from ${orgs ? `organizations ${orgs}` : "some organizations"} are hidden because the token is not authorized for their single sign-on. Use Configure SSO on the token's GitHub page.`,
+    );
+  }
+  return warnings;
+}
+
 export function describeErrors(errors: GraphQLError[], data: unknown): string[] {
   const groups = new Map<string, { message: string; field: string | null; item: boolean; repos: Set<string> }>();
   for (const error of errors) {
@@ -132,7 +150,20 @@ export function describeErrors(errors: GraphQLError[], data: unknown): string[] 
   });
 }
 
-export class GitHubError extends Error {}
+export class GitHubError extends Error {
+  readonly status: number | null;
+
+  constructor(message: string, status: number | null = null) {
+    super(message);
+    this.status = status;
+  }
+
+  get retryable(): boolean {
+    return this.status === 502 || this.status === 503 || this.status === 504;
+  }
+}
+
+const DETAIL_CONCURRENCY = 8;
 
 async function graphql<T>(
   token: string,
@@ -141,62 +172,120 @@ async function graphql<T>(
 ): Promise<{ data: T; warnings: string[] }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 30_000);
-  const response = await fetch("https://api.github.com/graphql", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${token}`,
-      "content-type": "application/json",
-      "user-agent": "paseo-github-prs",
-    },
-    body: JSON.stringify({ query, variables }),
-    signal: controller.signal,
-  }).finally(() => clearTimeout(timer));
+  let response: Response;
+  try {
+    response = await fetch("https://api.github.com/graphql", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+        "user-agent": "paseo-github-prs",
+      },
+      body: JSON.stringify({ query, variables }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) throw new GitHubError("GitHub did not respond within 30 seconds.", 504);
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
   if (response.status === 401) {
-    throw new GitHubError("GitHub rejected the token (401). Check that it is valid and not expired.");
+    throw new GitHubError("GitHub rejected the token (401). Check that it is valid and not expired.", 401);
   }
   if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new GitHubError(`GitHub returned ${response.status}: ${detail.slice(0, 300)}`);
+    const detail = response.status >= 500 ? "" : await response.text().catch(() => "");
+    const reason = response.status >= 502 && response.status <= 504 ? "GitHub timed out" : "GitHub returned an error";
+    throw new GitHubError(`${reason} (${response.status})${detail ? `: ${detail.slice(0, 300)}` : "."}`, response.status);
   }
   const payload = (await response.json()) as GraphQLResponse<T>;
-  const warnings = describeErrors(payload.errors ?? [], payload.data);
+  const warnings = [...accessWarnings(response.headers), ...describeErrors(payload.errors ?? [], payload.data)];
   if (!payload.data) {
     throw new GitHubError(warnings.join("\n") || "GitHub returned no data.");
   }
   return { data: payload.data, warnings };
 }
 
-export async function fetchViewer(token: string): Promise<string> {
-  const { data } = await graphql<{ viewer: { login: string } }>(token, "query { viewer { login } }");
-  return data.viewer.login;
+export async function fetchViewer(token: string): Promise<{ login: string; warnings: string[] }> {
+  const { data, warnings } = await graphql<{ viewer: { login: string } }>(token, "query { viewer { login } }");
+  return { login: data.viewer.login, warnings };
+}
+
+async function searchIds(
+  token: string,
+  queries: string[],
+): Promise<{ login: string; ids: string[][]; warnings: string[] }> {
+  const params = queries.map((_, index) => `$q${index}: String!`).join(", ");
+  const searches = queries
+    .map(
+      (_, index) =>
+        `q${index}: search(query: $q${index}, type: ISSUE, first: 50) { nodes { ... on PullRequest { id } ... on Issue { id } } }`,
+    )
+    .join("\n");
+  const variables = Object.fromEntries(queries.map((value, index) => [`q${index}`, value]));
+  type Search = { nodes: Array<{ id?: string } | null> } | null;
+  const { data, warnings } = await graphql<{ viewer: { login: string } } & Record<string, Search>>(
+    token,
+    `query(${params}) {\n viewer { login }\n${searches}\n}`,
+    variables,
+  );
+  const ids = queries.map((_, index) => (data[`q${index}`]?.nodes ?? []).flatMap((node) => (node?.id ? [node.id] : [])));
+  return { login: data.viewer.login, ids, warnings };
+}
+
+async function fetchNodes<T extends { id: string }>(
+  token: string,
+  ids: string[],
+  selection: string,
+  fragments: string,
+  batchSize: number,
+): Promise<{ nodes: Map<string, T>; warnings: string[] }> {
+  const query = `query($ids: [ID!]!) { nodes(ids: $ids) { ${selection} } }\n${fragments}`;
+  const nodes = new Map<string, T>();
+  const warnings: string[] = [];
+  let skipped = 0;
+
+  const load = async (batch: string[]): Promise<void> => {
+    try {
+      const result = await graphql<{ nodes: Array<Partial<T> | null> }>(token, query, { ids: batch });
+      warnings.push(...result.warnings);
+      for (const node of result.data.nodes) {
+        if (typeof node?.id === "string") nodes.set(node.id, node as T);
+      }
+    } catch (error) {
+      if (!(error instanceof GitHubError && error.retryable)) throw error;
+      if (batch.length === 1) {
+        skipped += 1;
+        return;
+      }
+      const half = Math.ceil(batch.length / 2);
+      await load(batch.slice(0, half));
+      await load(batch.slice(half));
+    }
+  };
+
+  const batches: string[][] = [];
+  for (let index = 0; index < ids.length; index += batchSize) batches.push(ids.slice(index, index + batchSize));
+  for (let index = 0; index < batches.length; index += DETAIL_CONCURRENCY) {
+    await Promise.all(batches.slice(index, index + DETAIL_CONCURRENCY).map(load));
+  }
+  if (skipped > 0) warnings.push(`${skipped} item${skipped > 1 ? "s" : ""} could not be loaded because GitHub timed out.`);
+  return { nodes, warnings };
 }
 
 export async function searchPullRequests(
   token: string,
   queries: string[],
 ): Promise<{ login: string; results: RawPullRequest[][]; warnings: string[] }> {
-  const params = queries.map((_, index) => `$q${index}: String!`).join(", ");
-  const searches = queries
-    .map(
-      (_, index) =>
-        `q${index}: search(query: $q${index}, type: ISSUE, first: 50) { nodes { ...PrFields } }`,
-    )
-    .join("\n");
-  const query = `query(${params}) {\n viewer { login }\n${searches}\n}\n${PR_FIELDS}`;
-  const variables = Object.fromEntries(queries.map((value, index) => [`q${index}`, value]));
-
-  type Search = { nodes: Array<Partial<RawPullRequest> | null> } | null;
-  const { data, warnings } = await graphql<{ viewer: { login: string } } & Record<string, Search>>(
-    token,
-    query,
-    variables,
+  const search = await searchIds(token, queries);
+  const details = await fetchNodes<RawPullRequest>(token, [...new Set(search.ids.flat())], "...PrFields", PR_FIELDS, 5);
+  const results = search.ids.map((ids) =>
+    ids.flatMap((id) => {
+      const pr = details.nodes.get(id);
+      return pr ? [pr] : [];
+    }),
   );
-  const results = queries.map((_, index) =>
-    (data[`q${index}`]?.nodes ?? []).filter(
-      (node): node is RawPullRequest => typeof node?.id === "string",
-    ),
-  );
-  return { login: data.viewer.login, results, warnings };
+  return { login: search.login, results, warnings: [...new Set([...search.warnings, ...details.warnings])] };
 }
 
 export interface RawAuthor {
@@ -246,40 +335,35 @@ export interface RawMentionTarget {
   reviewThreads?: { nodes: Array<RawMentionThread | null> };
 }
 
-const MENTION_QUERY = `
-query($q: String!) {
-  viewer { login }
-  search(query: $q, type: ISSUE, first: 50) {
-    nodes {
-      __typename
-      ... on Issue {
-        id number title url issueState: state body createdAt
-        author { __typename login }
-        reactionGroups { viewerHasReacted }
-        repository { nameWithOwner }
-        comments(last: 100) { nodes { ...MentionComment } }
-      }
-      ... on PullRequest {
-        id number title url prState: state body createdAt
-        author { __typename login }
-        reactionGroups { viewerHasReacted }
-        repository { nameWithOwner }
-        comments(last: 100) { nodes { ...MentionComment } }
-        reviews(last: 50) {
-          nodes { id url body submittedAt author { __typename login } reactionGroups { viewerHasReacted } }
-        }
-        reviewThreads(last: 50) {
-          nodes {
-            isResolved path
-            comments(last: 30) {
-              nodes { id url body createdAt author { __typename login } reactionGroups { viewerHasReacted } }
-            }
-          }
+const MENTION_SELECTION = `
+  __typename
+  ... on Issue {
+    id number title url issueState: state body createdAt
+    author { __typename login }
+    reactionGroups { viewerHasReacted }
+    repository { nameWithOwner }
+    comments(last: 100) { nodes { ...MentionComment } }
+  }
+  ... on PullRequest {
+    id number title url prState: state body createdAt
+    author { __typename login }
+    reactionGroups { viewerHasReacted }
+    repository { nameWithOwner }
+    comments(last: 100) { nodes { ...MentionComment } }
+    reviews(last: 50) {
+      nodes { id url body submittedAt author { __typename login } reactionGroups { viewerHasReacted } }
+    }
+    reviewThreads(last: 50) {
+      nodes {
+        isResolved path
+        comments(last: 30) {
+          nodes { id url body createdAt author { __typename login } reactionGroups { viewerHasReacted } }
         }
       }
     }
-  }
-}
+  }`;
+
+const MENTION_FRAGMENTS = `
 fragment MentionComment on IssueComment {
   id url body createdAt
   author { __typename login }
@@ -290,10 +374,12 @@ export async function searchMentions(
   token: string,
   query: string,
 ): Promise<{ login: string; targets: RawMentionTarget[]; warnings: string[] }> {
-  type Result = { viewer: { login: string }; search: { nodes: Array<Partial<RawMentionTarget> | null> } | null };
-  const { data, warnings } = await graphql<Result>(token, MENTION_QUERY, { q: query });
-  const targets = (data.search?.nodes ?? []).filter(
-    (node): node is RawMentionTarget => typeof node?.id === "string",
-  );
-  return { login: data.viewer.login, targets, warnings };
+  const search = await searchIds(token, [query]);
+  const ids = search.ids[0] ?? [];
+  const details = await fetchNodes<RawMentionTarget>(token, ids, MENTION_SELECTION, MENTION_FRAGMENTS, 5);
+  const targets = ids.flatMap((id) => {
+    const target = details.nodes.get(id);
+    return target ? [target] : [];
+  });
+  return { login: search.login, targets, warnings: [...new Set([...search.warnings, ...details.warnings])] };
 }
