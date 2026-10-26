@@ -41,7 +41,7 @@ export const pullRequest = z.object({
 export type PullRequest = z.infer<typeof pullRequest>;
 
 export const mySections = ["action", "merge", "checks", "review", "bot", "draft"] as const;
-export const reviewSections = ["ready", "rereview", "reviewed", "bot"] as const;
+export const reviewSections = ["ready", "rereview", "reviewed", "approved", "bot"] as const;
 
 export type MySection = (typeof mySections)[number];
 export type ReviewSection = (typeof reviewSections)[number];

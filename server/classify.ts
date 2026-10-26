@@ -130,15 +130,19 @@ export function describe(pr: RawPullRequest, rules: ReviewRules): Base {
   };
 }
 
+function isApproved(pr: Base): boolean {
+  return pr.reviewDecision === "approved" || (pr.reviewDecision === "none" && pr.approvals > 0);
+}
+
 export function mySection(pr: Base): MySection {
   if (pr.isDraft) return "draft";
   if (pr.conflicting || pr.ci === "failure" || pr.reviewDecision === "changes_requested") return "action";
-  const approved = pr.reviewDecision === "approved" || (pr.reviewDecision === "none" && pr.approvals > 0);
-  if (approved) return pr.ci === "pending" ? "checks" : "merge";
+  if (isApproved(pr)) return pr.ci === "pending" ? "checks" : "merge";
   return pr.stage === "ready" ? "review" : "bot";
 }
 
 export function reviewSection(pr: Base): ReviewSection {
+  if (!pr.myReview && isApproved(pr)) return "approved";
   if (pr.stage !== "ready") return "bot";
   if (!pr.myReview) return "ready";
   return pr.changedSinceMyReview ? "rereview" : "reviewed";

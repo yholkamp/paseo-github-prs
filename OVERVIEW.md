@@ -8,7 +8,7 @@ Your open pull requests are grouped into needs your attention (failing checks, m
 
 ## To review
 
-Pull requests from your review searches are grouped into ready for your review, changed since your review (new commits or a new ready comment after your last review), waiting on author, and still with the review bot.
+Pull requests from your review searches are grouped into ready for your review, changed since your review (new commits or a new ready comment after your last review), waiting on author, approved by others, and still with the review bot. Pull requests you have not reviewed yet that already have the approvals they need go under approved by others.
 
 Each pull request in the To review list has a Review button. It finds your local checkout of the repository by its GitHub remote, cloning it first if there is none, fetches the pull request branch, and starts a code review agent in a Paseo worktree for that branch. When a workspace for the branch already exists, it is fast-forwarded to the latest commit if it has no local changes, and a new review agent starts there. Paseo then opens the agent. Pull requests from forks are checked out as a local `pr-<number>` branch.
 
