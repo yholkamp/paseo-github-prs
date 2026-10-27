@@ -2,6 +2,8 @@ GitHub PRs adds a Pull requests screen to the Paseo sidebar with three lists: yo
 
 It is built for teams where a code review bot iterates on a pull request first, and the author then requests a review or comments that it is ready for review. Pull requests only count as ready once a review has been requested or that comment exists.
 
+When your pull requests and mentions span more than one GitHub organization or user, a row of filters at the top of the screen limits all three lists and the sidebar count to the owners you pick, so side projects stay out of your day-to-day view. Pick several to combine them, or All to see everything. The selection is kept on the daemon machine in `~/.config/paseo-github-prs/owner-filter.json` and shared between clients.
+
 ## My PRs
 
 Your open pull requests are grouped into needs your attention (failing checks, merge conflicts, changes requested), new comments, ready to merge, approved with checks running, awaiting review, not marked ready yet, and drafts. New comments holds pull requests where a reviewer or review bot left an unresolved review thread you have not replied to, or a comment or review after your latest commit or reply. Comments from other bots are ignored. Each row shows check status with the names of failing checks, the review decision, the number of new comments, and when it was marked ready.

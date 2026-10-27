@@ -108,10 +108,24 @@ function MentionCard({
   );
 }
 
-export function MentionsList({ data, theme, styles }: { data: Mentions; theme: PluginTheme; styles: Styles }) {
+export function MentionsList({
+  data,
+  filtered,
+  theme,
+  styles,
+}: {
+  data: Mentions;
+  filtered: boolean;
+  theme: PluginTheme;
+  styles: Styles;
+}) {
   const markDone = useMarkDone();
   if (data.mentions.length === 0) {
-    return <Text style={styles.empty}>No mentions in the selected period.</Text>;
+    return (
+      <Text style={styles.empty}>
+        {filtered ? "No mentions for the selected organizations." : "No mentions in the selected period."}
+      </Text>
+    );
   }
   return (
     <>

@@ -2,11 +2,13 @@ import type { PluginSidebarItemProps } from "@getpaseo/plugin/client";
 import { SidebarRow } from "@getpaseo/plugin/client/ui";
 import { Text, View } from "react-native";
 import { attentionCount, useMentions, useOverview } from "./data";
+import { filterMentions, filterOverview, useOwnerFilter } from "./filter";
 
 export function PullRequestsSidebarItem({ theme, currentScreen, openScreen }: PluginSidebarItemProps) {
   const overview = useOverview();
   const mentions = useMentions();
-  const count = attentionCount(overview.data, mentions.data);
+  const filter = useOwnerFilter();
+  const count = attentionCount(filterOverview(overview.data, filter), filterMentions(mentions.data, filter));
   return (
     <SidebarRow
       icon="GitPullRequest"

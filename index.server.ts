@@ -1,4 +1,5 @@
 import type { PluginServerContext } from "@getpaseo/plugin/server";
+import { readOwnerFilter, saveOwnerFilter } from "./server/filter";
 import { fetchViewer } from "./server/github";
 import { loadMentions, markMentionsDone } from "./server/mentions";
 import { authStatus, loadOverview } from "./server/overview";
@@ -9,9 +10,11 @@ import {
   getAuthStatus,
   getMentions,
   getOverview,
+  getOwnerFilter,
   listReviewJobs,
   saveToken,
   setMentionsDone,
+  setOwnerFilter,
   startReview,
 } from "./shared/rpc";
 import { preferences } from "./shared/settings";
@@ -22,6 +25,8 @@ export default function contribute(server: PluginServerContext) {
   server.handle(getOverview, ({ allowStale }) => loadOverview(settings, !!allowStale));
   server.handle(getMentions, ({ allowStale }) => loadMentions(settings, !!allowStale));
   server.handle(setMentionsDone, ({ ids, done }) => markMentionsDone(ids, done));
+  server.handle(getOwnerFilter, () => readOwnerFilter());
+  server.handle(setOwnerFilter, (filter) => saveOwnerFilter(filter));
   server.handle(startReview, (target, { paseo }) => startReviewJob(target, paseo, settings));
   server.handle(listReviewJobs, () => ({ jobs: currentReviewJobs() }));
   server.handle(getAuthStatus, () => authStatus());

@@ -113,6 +113,26 @@ export const setMentionsDone = defineRpc({
   output: z.object({ ok: z.boolean() }),
 });
 
+export const ownerFilter = z.object({ owners: z.array(z.string()) });
+
+export type OwnerFilter = z.infer<typeof ownerFilter>;
+
+export function repoOwner(repo: string): string {
+  return repo.slice(0, repo.indexOf("/"));
+}
+
+export const getOwnerFilter = defineRpc({
+  name: "github.filter",
+  input: z.object({}),
+  output: ownerFilter,
+});
+
+export const setOwnerFilter = defineRpc({
+  name: "github.filter.set",
+  input: ownerFilter,
+  output: ownerFilter,
+});
+
 export const reviewTarget = z.object({
   repo: z.string(),
   number: z.number(),

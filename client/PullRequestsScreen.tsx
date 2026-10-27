@@ -15,6 +15,7 @@ import {
   useMentions,
   useOverview,
 } from "./data";
+import { type Filter, filterMentions, filterOverview, ownersIn, useOwnerFilter } from "./filter";
 import { MentionsList } from "./Mentions";
 import { type Reviews, useReviews } from "./review";
 
@@ -130,10 +131,43 @@ function PullRequestCard({
   );
 }
 
+function OwnerFilterBar({ owners, filter, styles }: { owners: string[]; filter: Filter; styles: Styles }) {
+  if (owners.length < 2 && !filter.active) return null;
+  const chips: Array<{ key: string; label: string; a11y: string; selected: boolean; onPress(): void }> = [
+    { key: "", label: "All", a11y: "Show all organizations", selected: !filter.active, onPress: () => filter.active && filter.clear() },
+    ...owners.map((owner) => ({
+      key: owner,
+      label: owner,
+      a11y: `Show ${owner}`,
+      selected: filter.includes(owner),
+      onPress: () => filter.toggle(owner),
+    })),
+  ];
+  return (
+    <View style={styles.chips}>
+      {chips.map((chip) => (
+        <Pressable
+          key={chip.key}
+          accessibilityRole="button"
+          accessibilityLabel={chip.a11y}
+          accessibilityState={{ selected: chip.selected }}
+          onPress={chip.onPress}
+          style={[styles.chip, chip.selected ? styles.chipActive : null]}
+        >
+          <Text style={chip.selected ? styles.chipTextActive : styles.chipText} numberOfLines={1}>
+            {chip.label}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 function PullRequestList({
   prs,
   sections,
   tab,
+  filtered,
   reviews,
   theme,
   styles,
@@ -141,13 +175,20 @@ function PullRequestList({
   prs: PullRequest[];
   sections: SectionInfo<string>[];
   tab: Tab;
+  filtered: boolean;
   reviews: Reviews;
   theme: PluginTheme;
   styles: Styles;
 }) {
   if (prs.length === 0) {
     return (
-      <Text style={styles.empty}>{tab === "mine" ? "You have no open pull requests." : "Nothing in your review queue."}</Text>
+      <Text style={styles.empty}>
+        {filtered
+          ? "Nothing here for the selected organizations."
+          : tab === "mine"
+            ? "You have no open pull requests."
+            : "Nothing in your review queue."}
+      </Text>
     );
   }
   return (
@@ -183,16 +224,19 @@ export function PullRequestsScreen({ theme, layout, params, navigation, openSett
   const [tab, setTab] = useState<Tab>(initialTab(params.tab));
   const overview = useOverview();
   const mentions = useMentions();
+  const filter = useOwnerFilter();
   const active = tab === "mentions" ? mentions : overview;
+  const overviewData = filterOverview(overview.data, filter);
+  const mentionsData = filterMentions(mentions.data, filter);
 
   if (overview.isPending && mentions.isPending) {
     return <Loading />;
   }
 
   const tabs: Array<[Tab, string]> = [
-    ["reviews", `To review · ${reviewCount(overview.data)}`],
-    ["mine", `My PRs · ${overview.data?.mine.length ?? 0}`],
-    ["mentions", `Mentions · ${mentionCount(mentions.data)}`],
+    ["reviews", `To review · ${reviewCount(overviewData)}`],
+    ["mine", `My PRs · ${overviewData?.mine.length ?? 0}`],
+    ["mentions", `Mentions · ${mentionCount(mentionsData)}`],
   ];
   const warnings = [...new Set([...(overview.data?.warnings ?? []), ...(mentions.data?.warnings ?? [])])];
 
@@ -229,6 +273,8 @@ export function PullRequestsScreen({ theme, layout, params, navigation, openSett
         </View>
       ) : null}
 
+      <OwnerFilterBar owners={ownersIn(overview.data, mentions.data, filter)} filter={filter} styles={styles} />
+
       <View style={styles.tabs} accessibilityRole="tablist">
         {tabs.map(([id, label]) => (
           <Pressable
@@ -257,12 +303,13 @@ export function PullRequestsScreen({ theme, layout, params, navigation, openSett
       {active.isPending ? (
         <Loading />
       ) : tab === "mentions" ? (
-        mentions.data ? <MentionsList data={mentions.data} theme={theme} styles={styles} /> : null
-      ) : overview.data ? (
+        mentionsData ? <MentionsList data={mentionsData} filtered={filter.active} theme={theme} styles={styles} /> : null
+      ) : overviewData ? (
         <PullRequestList
-          prs={tab === "mine" ? overview.data.mine : overview.data.reviews}
+          prs={tab === "mine" ? overviewData.mine : overviewData.reviews}
           sections={tab === "mine" ? MY_SECTIONS : REVIEW_SECTIONS}
           tab={tab}
+          filtered={filter.active}
           reviews={reviews}
           theme={theme}
           styles={styles}
