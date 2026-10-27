@@ -12,6 +12,7 @@ type Values = ReturnType<typeof preferences.schema.parse>;
 const cache = new SharedCache<Omit<Overview, "stale">>("cache-overview.json");
 
 const BASE_QUERY = "is:pr is:open archived:false";
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 function byUpdated(a: PullRequest, b: PullRequest): number {
   return b.updatedAt.localeCompare(a.updatedAt);
@@ -49,9 +50,15 @@ export async function loadOverview(settings: Preferences, allowStale: boolean): 
 
 async function fetchOverview(token: string, prefs: Values): Promise<Omit<Overview, "stale">> {
   const reviewQueries = [...new Set(prefs.reviewQueries.map((query) => query.trim()).filter(Boolean))];
+  const reviewFilters = [
+    prefs.hideDependabot ? "-author:app/dependabot" : null,
+    prefs.reviewActivityWeeks > 0
+      ? `updated:>=${new Date(Date.now() - prefs.reviewActivityWeeks * WEEK_MS).toISOString().slice(0, 10)}`
+      : null,
+  ].filter(Boolean);
   const { login, results, warnings } = await searchPullRequests(token, [
     `${BASE_QUERY} author:@me`,
-    ...reviewQueries.map((query) => `${BASE_QUERY} ${query}`),
+    ...reviewQueries.map((query) => [BASE_QUERY, ...reviewFilters, query].join(" ")),
   ]);
 
   const rules = {

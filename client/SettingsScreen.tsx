@@ -50,6 +50,14 @@ const MENTION_DAY_OPTIONS = [
   { label: "90 days", value: "90" },
 ];
 
+const ACTIVITY_WEEK_OPTIONS = [
+  { label: "1 week", value: "1" },
+  { label: "2 weeks", value: "2" },
+  { label: "4 weeks", value: "4" },
+  { label: "8 weeks", value: "8" },
+  { label: "Any time", value: "0" },
+];
+
 function describeAuth(status: AuthStatus | undefined): { text: string; error: string | null } {
   if (!status) return { text: "Checking…", error: null };
   if (status.source === "none") return { text: "No token found", error: null };
@@ -159,7 +167,7 @@ function PreferencesForm({
         <SettingsCard>
           <SettingsInput
             label="Ready for review marker"
-            hint="Case-insensitive regular expression matched against PR comments and review bodies. A PR counts as ready once a matching comment exists."
+            hint="Case-insensitive regular expression matched against PR comments and review bodies. A PR counts as ready once a matching comment exists or a review is requested."
             initialValue={values.readyPattern}
             placeholder={DEFAULT_READY_PATTERN}
             onChangeText={(readyPattern) => setDraft({ ...draft, readyPattern })}
@@ -207,6 +215,18 @@ function PreferencesForm({
             onChangeText={setNewQuery}
           />
           <SettingsAction label="Add search" actionLabel="Add" disabled={!newQuery.trim()} onPress={addQuery} />
+          <SettingsSelect
+            label="Recent activity"
+            hint="Only pull requests updated within this period are listed."
+            value={String(draft.reviewActivityWeeks)}
+            options={ACTIVITY_WEEK_OPTIONS}
+            onValueChange={(value) => setDraft({ ...draft, reviewActivityWeeks: Number(value) })}
+          />
+          <SettingsSwitch
+            label="Hide Dependabot pull requests"
+            value={draft.hideDependabot}
+            onValueChange={(hideDependabot) => setDraft({ ...draft, hideDependabot })}
+          />
         </SettingsCard>
       </SettingsSection>
 
