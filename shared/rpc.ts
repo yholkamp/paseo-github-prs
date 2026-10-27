@@ -13,6 +13,8 @@ export type AuthStatus = z.infer<typeof authStatus>;
 
 export const ciState = z.enum(["success", "failure", "pending", "none"]);
 
+const cachedInput = z.object({ allowStale: z.boolean().optional() });
+
 export const pullRequest = z.object({
   id: z.string(),
   number: z.number(),
@@ -35,13 +37,14 @@ export const pullRequest = z.object({
   readyAt: z.string().nullable(),
   myReview: z.enum(["approved", "changes_requested", "commented"]).nullable(),
   changedSinceMyReview: z.boolean(),
+  newComments: z.number(),
   section: z.string(),
 });
 
 export type PullRequest = z.infer<typeof pullRequest>;
 
-export const mySections = ["action", "merge", "checks", "review", "bot", "draft"] as const;
-export const reviewSections = ["ready", "rereview", "reviewed", "approved", "bot"] as const;
+export const mySections = ["action", "comments", "merge", "checks", "review", "bot", "draft"] as const;
+export const reviewSections = ["ready", "rereview", "reviewed", "approved", "bot", "draft"] as const;
 
 export type MySection = (typeof mySections)[number];
 export type ReviewSection = (typeof reviewSections)[number];
@@ -52,13 +55,14 @@ export const overview = z.object({
   reviews: z.array(pullRequest),
   warnings: z.array(z.string()),
   fetchedAt: z.string(),
+  stale: z.boolean(),
 });
 
 export type Overview = z.infer<typeof overview>;
 
 export const getOverview = defineRpc({
   name: "github.overview",
-  input: z.object({}),
+  input: cachedInput,
   output: overview,
 });
 
@@ -92,13 +96,14 @@ export const mentions = z.object({
   mentions: z.array(mention),
   warnings: z.array(z.string()),
   fetchedAt: z.string(),
+  stale: z.boolean(),
 });
 
 export type Mentions = z.infer<typeof mentions>;
 
 export const getMentions = defineRpc({
   name: "github.mentions",
-  input: z.object({}),
+  input: cachedInput,
   output: mentions,
 });
 

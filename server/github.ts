@@ -1,4 +1,5 @@
 export interface RawActor {
+  __typename?: string;
   login: string;
 }
 
@@ -38,9 +39,14 @@ export interface RawPullRequest {
   latestOpinionatedReviews: { nodes: Array<{ state: RawReview["state"] } | null> };
   reviews: { nodes: Array<RawReview | null> };
   comments: { nodes: Array<RawComment | null> };
+  reviewRequests: { nodes: Array<{ createdAt?: string } | null> };
+  reviewThreads: {
+    nodes: Array<{ isResolved: boolean; comments: { nodes: Array<{ createdAt: string; author: RawActor | null } | null> } } | null>;
+  };
   commits: {
     nodes: Array<{
       commit: {
+        committedDate: string;
         statusCheckRollup: {
           state: "SUCCESS" | "FAILURE" | "ERROR" | "PENDING" | "EXPECTED";
           contexts: { nodes: Array<RawCheck | null> };
@@ -56,11 +62,18 @@ fragment PrFields on PullRequest {
   repository { nameWithOwner }
   author { login }
   latestOpinionatedReviews(first: 30) { nodes { state } }
-  reviews(last: 50) { nodes { state submittedAt body author { login } commit { oid } } }
-  comments(last: 100) { nodes { body createdAt author { login } } }
+  reviews(last: 50) { nodes { state submittedAt body author { __typename login } commit { oid } } }
+  comments(last: 100) { nodes { body createdAt author { __typename login } } }
+  reviewRequests: timelineItems(last: 1, itemTypes: [REVIEW_REQUESTED_EVENT]) {
+    nodes { ... on ReviewRequestedEvent { createdAt } }
+  }
+  reviewThreads(last: 50) {
+    nodes { isResolved comments(last: 1) { nodes { createdAt author { __typename login } } } }
+  }
   commits(last: 1) {
     nodes {
       commit {
+        committedDate
         statusCheckRollup {
           state
           contexts(first: 100) {
@@ -96,6 +109,7 @@ const PERMISSION_HINTS: Record<string, string> = {
   mergeable: "Needs Contents: read.",
   reviews: "Needs Pull requests: read.",
   reviewThreads: "Needs Pull requests: read.",
+  reviewRequests: "Needs Pull requests: read.",
   latestOpinionatedReviews: "Needs Pull requests: read.",
 };
 

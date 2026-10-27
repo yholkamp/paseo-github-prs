@@ -1,11 +1,15 @@
 import type { PluginSettings } from "@getpaseo/plugin/server";
 import type { AuthStatus, Overview, PullRequest } from "../shared/rpc";
 import { DEFAULT_READY_PATTERN, isValidPattern, preferences } from "../shared/settings";
+import { cacheKey, SharedCache } from "./cache";
 import { describe, mySection, normalizeLogin, reviewSection } from "./classify";
 import { fetchViewer, searchPullRequests } from "./github";
 import { resolveToken } from "./token";
 
 type Preferences = PluginSettings<typeof preferences.schema>;
+type Values = ReturnType<typeof preferences.schema.parse>;
+
+const cache = new SharedCache<Omit<Overview, "stale">>("cache-overview.json");
 
 const BASE_QUERY = "is:pr is:open archived:false";
 
@@ -28,16 +32,24 @@ export async function authStatus(): Promise<AuthStatus> {
   }
 }
 
-export async function loadOverview(settings: Preferences): Promise<Overview> {
+export async function loadOverview(settings: Preferences, allowStale: boolean): Promise<Overview> {
   const resolved = await resolveToken();
   if (!resolved) {
     throw new Error("No GitHub token configured. Add one under Settings → Plugins → GitHub PRs.");
   }
   const stored = await settings.read();
   const prefs = stored.status === "ready" ? stored.values : preferences.schema.parse({});
+  const { value, stale } = await cache.get(
+    cacheKey(resolved.token, prefs),
+    () => fetchOverview(resolved.token, prefs),
+    allowStale,
+  );
+  return { ...value, stale };
+}
 
+async function fetchOverview(token: string, prefs: Values): Promise<Omit<Overview, "stale">> {
   const reviewQueries = [...new Set(prefs.reviewQueries.map((query) => query.trim()).filter(Boolean))];
-  const { login, results, warnings } = await searchPullRequests(resolved.token, [
+  const { login, results, warnings } = await searchPullRequests(token, [
     `${BASE_QUERY} author:@me`,
     ...reviewQueries.map((query) => `${BASE_QUERY} ${query}`),
   ]);

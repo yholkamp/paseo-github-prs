@@ -1,5 +1,6 @@
 import { useRpc, useSettings } from "@getpaseo/plugin/client";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import {
   getMentions,
   getOverview,
@@ -28,16 +29,31 @@ function usePolling() {
   };
 }
 
-export function useOverview() {
-  const fetchOverview = useRpc(getOverview);
+function useCachedQuery<T extends { stale: boolean }>(
+  key: readonly unknown[],
+  fetch: (input: { allowStale?: boolean }) => Promise<T>,
+) {
+  const queryClient = useQueryClient();
   const { revision, ...options } = usePolling();
-  return useQuery({ queryKey: [...OVERVIEW_KEY, revision], queryFn: () => fetchOverview({}), ...options });
+  const queryKey = [...key, revision];
+  const query = useQuery({
+    queryKey,
+    queryFn: () => fetch({ allowStale: queryClient.getQueryData(queryKey) === undefined }),
+    ...options,
+  });
+  const { data, isPlaceholderData, refetch } = query;
+  useEffect(() => {
+    if (data?.stale && !isPlaceholderData) void refetch();
+  }, [data, isPlaceholderData, refetch]);
+  return query;
+}
+
+export function useOverview() {
+  return useCachedQuery(OVERVIEW_KEY, useRpc(getOverview));
 }
 
 export function useMentions() {
-  const fetchMentions = useRpc(getMentions);
-  const { revision, ...options } = usePolling();
-  return useQuery({ queryKey: [...MENTIONS_KEY, revision], queryFn: () => fetchMentions({}), ...options });
+  return useCachedQuery(MENTIONS_KEY, useRpc(getMentions));
 }
 
 export function reviewCount(data: Overview | undefined): number {
@@ -49,7 +65,7 @@ export function mentionCount(data: Mentions | undefined): number {
 }
 
 export function attentionCount(overview: Overview | undefined, mentions: Mentions | undefined): number {
-  const mine = overview?.mine.filter((pr) => pr.section === "action" || pr.section === "merge").length ?? 0;
+  const mine = overview?.mine.filter((pr) => pr.section === "action" || pr.section === "comments" || pr.section === "merge").length ?? 0;
   return reviewCount(overview) + mine + mentionCount(mentions);
 }
 
@@ -61,6 +77,7 @@ export interface SectionInfo<Id extends string> {
 
 export const MY_SECTIONS: SectionInfo<MySection>[] = [
   { id: "action", title: "Needs your attention", collapsed: false },
+  { id: "comments", title: "New comments", collapsed: false },
   { id: "merge", title: "Ready to merge", collapsed: false },
   { id: "checks", title: "Approved, checks running", collapsed: false },
   { id: "review", title: "Awaiting review", collapsed: false },
@@ -74,6 +91,7 @@ export const REVIEW_SECTIONS: SectionInfo<ReviewSection>[] = [
   { id: "reviewed", title: "Waiting on author", collapsed: true },
   { id: "approved", title: "Approved by others", collapsed: true },
   { id: "bot", title: "Still with the review bot", collapsed: true },
+  { id: "draft", title: "Drafts", collapsed: true },
 ];
 
 export const MENTION_SECTIONS: SectionInfo<MentionSection>[] = [

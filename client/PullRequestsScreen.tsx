@@ -49,6 +49,10 @@ function badgesFor(pr: PullRequest, tab: Tab): BadgeSpec[] {
   if (pr.stage === "ready" && pr.readyAt) badges.push({ label: `Ready ${timeAgo(pr.readyAt)}`, tone: "muted", icon: "Flag" });
   else if (pr.stage === "bot") badges.push({ label: "With review bot", tone: "muted", icon: "Bot" });
 
+  if (tab === "mine" && pr.newComments > 0) {
+    badges.push({ label: `${pr.newComments} new comment${pr.newComments > 1 ? "s" : ""}`, tone: "warning", icon: "MessageSquare" });
+  }
+
   if (tab === "reviews") {
     if (pr.myReview === "approved") badges.push({ label: "You approved", tone: "success" });
     else if (pr.myReview === "changes_requested") badges.push({ label: "You requested changes", tone: "warning" });

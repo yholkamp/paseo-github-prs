@@ -1,5 +1,5 @@
 import type { MySection, PullRequest, ReviewSection } from "../shared/rpc";
-import type { RawCheck, RawPullRequest } from "./github";
+import type { RawActor, RawCheck, RawPullRequest } from "./github";
 
 export interface ReviewRules {
   viewer: string;
@@ -74,17 +74,16 @@ export function describe(pr: RawPullRequest, rules: ReviewRules): Base {
     ...reviews.map((review) => ({ at: review.submittedAt!, body: review.body, author: review.author?.login })),
   ];
 
-  const readyAt = latest(activity.filter((entry) => rules.readyPattern.test(entry.body)).map((entry) => entry.at));
+  const markedAt = latest(activity.filter((entry) => rules.readyPattern.test(entry.body)).map((entry) => entry.at));
+  const requestedAt = latest(pr.reviewRequests.nodes.map((node) => node?.createdAt));
+  const readyAt = latest([markedAt, requestedAt]);
   const botAt = latest(
     activity
       .filter((entry) => entry.author && rules.botLogins.has(normalizeLogin(entry.author)))
       .map((entry) => entry.at),
   );
-  const stage = pr.isDraft
-    ? "draft"
-    : !readyAt || (rules.botActivityResetsReady && botAt && botAt > readyAt)
-      ? "bot"
-      : "ready";
+  const markerStands = !!markedAt && !(rules.botActivityResetsReady && botAt && botAt > markedAt);
+  const stage = pr.isDraft ? "draft" : requestedAt || markerStands ? "ready" : "bot";
 
   const mine = reviews.filter((review) => review.author && normalizeLogin(review.author.login) === viewer);
   const myLatest = mine[mine.length - 1];
@@ -96,6 +95,35 @@ export function describe(pr: RawPullRequest, rules: ReviewRules): Base {
         : myLatest.state === "CHANGES_REQUESTED"
           ? "changes_requested"
           : "commented";
+  const isMe = (author: RawActor | null | undefined) => !!author && normalizeLogin(author.login) === viewer;
+  const isReviewer = (author: RawActor | null | undefined) =>
+    !!author &&
+    !isMe(author) &&
+    (author.__typename !== "Bot" || rules.botLogins.has(normalizeLogin(author.login)));
+  const threadTails = pr.reviewThreads.nodes.flatMap((thread) =>
+    thread && !thread.isResolved && thread.comments.nodes[0] ? [thread.comments.nodes[0]] : [],
+  );
+  const myLastActivity = latest([
+    pr.commits.nodes[0]?.commit.committedDate,
+    ...comments.filter((comment) => isMe(comment.author)).map((comment) => comment.createdAt),
+    ...mine.map((review) => review.submittedAt),
+    ...threadTails.filter((tail) => isMe(tail.author)).map((tail) => tail.createdAt),
+  ]);
+  const newComments =
+    threadTails.filter((tail) => isReviewer(tail.author)).length +
+    [
+      ...comments.map((comment) => ({ at: comment.createdAt, body: comment.body, author: comment.author })),
+      ...reviews
+        .filter((review) => review.state === "COMMENTED" || review.state === "CHANGES_REQUESTED")
+        .map((review) => ({ at: review.submittedAt!, body: review.body, author: review.author })),
+    ].filter(
+      (entry) =>
+        entry.body.trim() &&
+        isReviewer(entry.author) &&
+        !rules.readyPattern.test(entry.body) &&
+        (!myLastActivity || entry.at > myLastActivity),
+    ).length;
+
   const changedSinceMyReview =
     myReview !== null &&
     (myLatest!.commit?.oid !== pr.headRefOid || (!!readyAt && readyAt > myLatest!.submittedAt!));
@@ -127,6 +155,7 @@ export function describe(pr: RawPullRequest, rules: ReviewRules): Base {
     readyAt,
     myReview,
     changedSinceMyReview,
+    newComments,
   };
 }
 
@@ -137,11 +166,13 @@ function isApproved(pr: Base): boolean {
 export function mySection(pr: Base): MySection {
   if (pr.isDraft) return "draft";
   if (pr.conflicting || pr.ci === "failure" || pr.reviewDecision === "changes_requested") return "action";
+  if (pr.newComments > 0) return "comments";
   if (isApproved(pr)) return pr.ci === "pending" ? "checks" : "merge";
   return pr.stage === "ready" ? "review" : "bot";
 }
 
 export function reviewSection(pr: Base): ReviewSection {
+  if (pr.isDraft) return "draft";
   if (!pr.myReview && isApproved(pr)) return "approved";
   if (pr.stage !== "ready") return "bot";
   if (!pr.myReview) return "ready";

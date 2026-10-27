@@ -1,6 +1,7 @@
 import type { PluginSettings } from "@getpaseo/plugin/server";
 import type { Mention, Mentions } from "../shared/rpc";
 import { preferences } from "../shared/settings";
+import { cacheKey, SharedCache } from "./cache";
 import { normalizeLogin } from "./classify";
 import { type RawAuthor, type RawMentionTarget, searchMentions } from "./github";
 import { readConfigFile, writeConfigFile } from "./storage";
@@ -46,6 +47,9 @@ function reacted(groups: Array<{ viewerHasReacted: boolean }> | null): boolean {
 }
 
 type Found = Omit<Mention, "section">;
+type Fetched = Omit<Mentions, "mentions" | "stale"> & { mentions: Found[] };
+
+const cache = new SharedCache<Fetched>("cache-mentions.json");
 
 export function findMentions(target: RawMentionTarget, rules: MentionRules): Found[] {
   const viewer = normalizeLogin(rules.viewer);
@@ -149,28 +153,32 @@ export function markMentionsDone(ids: string[], done: boolean): Promise<{ ok: bo
   return next;
 }
 
-export async function loadMentions(settings: Preferences): Promise<Mentions> {
+export async function loadMentions(settings: Preferences, allowStale: boolean): Promise<Mentions> {
   const resolved = await resolveToken();
   if (!resolved) {
     throw new Error("No GitHub token configured. Add one under Settings → Plugins → GitHub PRs.");
   }
   const stored = await settings.read();
   const prefs = stored.status === "ready" ? stored.values : preferences.schema.parse({});
+  const [{ value, stale }, done] = await Promise.all([
+    cache.get(cacheKey(resolved.token, prefs), () => fetchMentions(resolved.token, prefs), allowStale),
+    readDone(),
+  ]);
+  const mentions: Mention[] = value.mentions.map((found) => ({
+    ...found,
+    section: done[found.id] ? "done" : found.answered ? "answered" : "unanswered",
+  }));
+  return { ...value, mentions, stale };
+}
+
+async function fetchMentions(token: string, prefs: ReturnType<typeof preferences.schema.parse>): Promise<Fetched> {
   const since = new Date(Date.now() - prefs.mentionDays * 24 * 60 * 60 * 1000);
   const day = since.toISOString().slice(0, 10);
   const query = `mentions:@me archived:false updated:>=${day}${prefs.mentionsIncludeClosed ? "" : " is:open"} sort:updated-desc`;
 
-  const [{ login, targets, warnings }, done] = await Promise.all([
-    searchMentions(resolved.token, query),
-    readDone(),
-  ]);
+  const { login, targets, warnings } = await searchMentions(token, query);
   const rules = { viewer: login, since: since.toISOString(), hideBots: prefs.mentionsHideBots };
-  const mentions: Mention[] = targets
-    .flatMap((target) => findMentions(target, rules))
-    .map((found) => ({
-      ...found,
-      section: done[found.id] ? "done" : found.answered ? "answered" : "unanswered",
-    }));
+  const mentions = targets.flatMap((target) => findMentions(target, rules));
   mentions.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   return { login, mentions, warnings, fetchedAt: new Date().toISOString() };

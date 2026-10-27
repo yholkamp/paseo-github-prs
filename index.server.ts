@@ -19,8 +19,8 @@ import { preferences } from "./shared/settings";
 export default function contribute(server: PluginServerContext) {
   const settings = server.registerSettings(preferences);
 
-  server.handle(getOverview, () => loadOverview(settings));
-  server.handle(getMentions, () => loadMentions(settings));
+  server.handle(getOverview, ({ allowStale }) => loadOverview(settings, !!allowStale));
+  server.handle(getMentions, ({ allowStale }) => loadMentions(settings, !!allowStale));
   server.handle(setMentionsDone, ({ ids, done }) => markMentionsDone(ids, done));
   server.handle(startReview, (target, { paseo }) => startReviewJob(target, paseo, settings));
   server.handle(listReviewJobs, () => ({ jobs: currentReviewJobs() }));
