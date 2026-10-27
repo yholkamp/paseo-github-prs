@@ -124,6 +124,16 @@ export function describe(pr: RawPullRequest, rules: ReviewRules): Base {
         (!myLastActivity || entry.at > myLastActivity),
     ).length;
 
+  const prAuthor = normalizeLogin(pr.author?.login ?? "");
+  const otherReviewers = [
+    ...new Set(
+      reviews
+        .filter((review) => isReviewer(review.author) && review.author!.__typename !== "Bot")
+        .map((review) => review.author!.login)
+        .filter((login) => normalizeLogin(login) !== prAuthor),
+    ),
+  ];
+
   const changedSinceMyReview =
     myReview !== null &&
     (myLatest!.commit?.oid !== pr.headRefOid || (!!readyAt && readyAt > myLatest!.submittedAt!));
@@ -155,6 +165,7 @@ export function describe(pr: RawPullRequest, rules: ReviewRules): Base {
     stage,
     readyAt,
     myReview,
+    otherReviewers,
     changedSinceMyReview,
     newComments,
   };
@@ -172,10 +183,10 @@ export function mySection(pr: Base): MySection {
   return pr.stage === "ready" ? "review" : "bot";
 }
 
-export function reviewSection(pr: Base): ReviewSection {
+export function reviewSection(pr: Base, skipOthersReviewing: boolean): ReviewSection {
   if (pr.isDraft) return "draft";
   if (!pr.myReview && isApproved(pr)) return "approved";
   if (pr.stage !== "ready") return "bot";
-  if (!pr.myReview) return "ready";
+  if (!pr.myReview) return skipOthersReviewing && pr.otherReviewers.length > 0 ? "others" : "ready";
   return pr.changedSinceMyReview ? "rereview" : "reviewed";
 }

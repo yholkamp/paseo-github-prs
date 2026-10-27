@@ -89,6 +89,7 @@ export const REVIEW_SECTIONS: SectionInfo<ReviewSection>[] = [
   { id: "ready", title: "Ready for your review", collapsed: false },
   { id: "rereview", title: "Changed since your review", collapsed: false },
   { id: "reviewed", title: "Waiting on author", collapsed: true },
+  { id: "others", title: "Others reviewing", collapsed: true },
   { id: "approved", title: "Approved by others", collapsed: true },
   { id: "bot", title: "Still with the review bot", collapsed: true },
   { id: "draft", title: "Drafts", collapsed: true },

@@ -58,6 +58,11 @@ function badgesFor(pr: PullRequest, tab: Tab): BadgeSpec[] {
     if (pr.myReview === "approved") badges.push({ label: "You approved", tone: "success" });
     else if (pr.myReview === "changes_requested") badges.push({ label: "You requested changes", tone: "warning" });
     else if (pr.myReview === "commented") badges.push({ label: "You commented", tone: "muted" });
+    else if (pr.otherReviewers.length > 0) {
+      const names = pr.otherReviewers.slice(0, 2).join(", ");
+      const more = pr.otherReviewers.length > 2 ? ` +${pr.otherReviewers.length - 2}` : "";
+      badges.push({ label: `Reviewed by ${names}${more}`, tone: "muted", icon: "Users" });
+    }
     if (pr.changedSinceMyReview) badges.push({ label: "Updated since your review", tone: "warning", icon: "RefreshCw" });
   }
   return badges;

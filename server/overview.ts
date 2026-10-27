@@ -83,7 +83,7 @@ async function fetchOverview(token: string, prefs: Values): Promise<Omit<Overvie
     if (seen.has(raw.id) || normalizeLogin(raw.author?.login ?? "") === normalizeLogin(login)) continue;
     seen.add(raw.id);
     const pr = describe(raw, rules);
-    reviews.push({ ...pr, section: reviewSection(pr) });
+    reviews.push({ ...pr, section: reviewSection(pr, prefs.skipOthersReviewing) });
   }
 
   const sort = (prs: PullRequest[]) =>

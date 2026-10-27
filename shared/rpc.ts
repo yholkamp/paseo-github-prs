@@ -37,6 +37,7 @@ export const pullRequest = z.object({
   stage: z.enum(["draft", "bot", "ready"]),
   readyAt: z.string().nullable(),
   myReview: z.enum(["approved", "changes_requested", "commented"]).nullable(),
+  otherReviewers: z.array(z.string()).default([]),
   changedSinceMyReview: z.boolean(),
   newComments: z.number(),
   section: z.string(),
@@ -45,7 +46,7 @@ export const pullRequest = z.object({
 export type PullRequest = z.infer<typeof pullRequest>;
 
 export const mySections = ["action", "comments", "merge", "checks", "review", "bot", "draft"] as const;
-export const reviewSections = ["ready", "rereview", "reviewed", "approved", "bot", "draft"] as const;
+export const reviewSections = ["ready", "rereview", "reviewed", "others", "approved", "bot", "draft"] as const;
 
 export type MySection = (typeof mySections)[number];
 export type ReviewSection = (typeof reviewSections)[number];

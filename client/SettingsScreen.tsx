@@ -227,6 +227,12 @@ function PreferencesForm({
             value={draft.hideDependabot}
             onValueChange={(hideDependabot) => setDraft({ ...draft, hideDependabot })}
           />
+          <SettingsSwitch
+            label="Skip pull requests others are reviewing"
+            hint="Pull requests you have not reviewed where another person already left a review move to Others reviewing and are not counted. You still see mentions."
+            value={draft.skipOthersReviewing}
+            onValueChange={(skipOthersReviewing) => setDraft({ ...draft, skipOthersReviewing })}
+          />
         </SettingsCard>
       </SettingsSection>
 

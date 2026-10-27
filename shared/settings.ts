@@ -20,6 +20,7 @@ export const preferences = defineSettings({
     botActivityResetsReady: z.boolean().default(true),
     reviewQueries: z.array(z.string()).default(DEFAULT_REVIEW_QUERIES),
     hideDependabot: z.boolean().default(true),
+    skipOthersReviewing: z.boolean().default(true),
     reviewActivityWeeks: z.number().int().min(0).max(52).default(2),
     refreshMinutes: z.number().int().min(0).max(60).default(5),
     mentionDays: z.number().int().min(1).max(90).default(14),

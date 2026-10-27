@@ -10,7 +10,7 @@ Your open pull requests are grouped into needs your attention (failing checks, m
 
 ## To review
 
-Pull requests from your review searches are grouped into ready for your review, changed since your review (new commits or a new ready comment after your last review), waiting on author, approved by others, still with the review bot, and drafts. Pull requests you have not reviewed yet that already have the approvals they need go under approved by others.
+Pull requests from your review searches are grouped into ready for your review, changed since your review (new commits or a new ready comment after your last review), waiting on author, others reviewing, approved by others, still with the review bot, and drafts. Pull requests you have not reviewed yet that already have the approvals they need go under approved by others. Pull requests you have not reviewed yet where another person (not the author or a bot) already left a review go under others reviewing and are not counted, so you only hear about them when someone mentions you. Turn off Skip pull requests others are reviewing to keep them in ready for your review.
 
 Each pull request in the To review list has a Review button. It finds your local checkout of the repository by its GitHub remote, cloning it first if there is none, fetches the pull request branch, and starts a code review agent in a Paseo worktree for that branch. When a workspace for the branch already exists, it is fast-forwarded to the latest commit if it has no local changes, and a new review agent starts there. Review agents start in the provider's auto mode (Auto mode for Claude, Auto-review for Codex) so permission prompts are handled automatically. Paseo then opens the agent.
 
