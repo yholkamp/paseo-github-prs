@@ -5,6 +5,8 @@ export const DEFAULT_READY_PATTERN = "ready for (a |human |another )?review";
 
 export const DEFAULT_REVIEW_PROVIDER = "claude/claude-opus-5-5";
 export const DEFAULT_REVIEW_PROMPT = "/code-review high {branch}";
+export const DEFAULT_FOLLOW_UP_PROMPT =
+  "The pull request has new commits since your last review ({previous}..{head}) and the workspace is updated to {head}. Review the changes since your last review the same way, and for each issue you raised before, say whether it was addressed.";
 
 export const DEFAULT_REVIEW_QUERIES = ["review-requested:@me", "reviewed-by:@me"];
 
@@ -23,6 +25,7 @@ export const preferences = defineSettings({
     mentionsHideBots: z.boolean().default(true),
     reviewProvider: z.string().default(DEFAULT_REVIEW_PROVIDER),
     reviewPrompt: z.string().default(DEFAULT_REVIEW_PROMPT),
+    followUpPrompt: z.string().default(DEFAULT_FOLLOW_UP_PROMPT),
     cloneDirectory: z.string().default(""),
   }),
 });

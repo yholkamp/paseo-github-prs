@@ -65,19 +65,31 @@ function badgesFor(pr: PullRequest, tab: Tab): BadgeSpec[] {
 
 function ReviewButton({ pr, reviews, theme, styles }: { pr: PullRequest; reviews: Reviews; theme: PluginTheme; styles: Styles }) {
   const job = reviews.jobFor(pr);
+  const record = reviews.recordFor(pr);
   const running = job?.state === "running";
-  const done = job?.state === "done" && !!job.agentId;
+  const upToDate = !!record && (!pr.headSha || record.headSha === pr.headSha);
+  const label = running ? `${job.step}…` : upToDate ? "Open review" : record ? "Re-review" : "Review";
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={done ? `Open code review of pull request ${pr.number}` : `Start code review of pull request ${pr.number}`}
+      accessibilityLabel={
+        upToDate
+          ? `Open code review of pull request ${pr.number}`
+          : record
+            ? `Re-review pull request ${pr.number} in the previous review session`
+            : `Start code review of pull request ${pr.number}`
+      }
       accessibilityState={{ busy: running, disabled: running }}
       disabled={running}
-      onPress={() => (done ? reviews.open(job) : reviews.start(pr))}
+      onPress={() => (upToDate ? reviews.open(record) : reviews.start(pr))}
       style={styles.smallButton}
     >
-      <Icon name={running ? "Loader" : done ? "Bot" : "ScanSearch"} size={12} color={theme.colors.foreground} />
-      <Text style={styles.smallButtonText}>{running ? `${job.step}…` : done ? "Open review" : "Review"}</Text>
+      <Icon
+        name={running ? "Loader" : upToDate ? "Bot" : record ? "RefreshCw" : "ScanSearch"}
+        size={12}
+        color={theme.colors.foreground}
+      />
+      <Text style={styles.smallButtonText}>{label}</Text>
     </Pressable>
   );
 }

@@ -4,9 +4,11 @@ import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { type ReviewJob, reviewKey, type ReviewTarget } from "../shared/rpc";
+import { z } from "zod";
+import { type ReviewJob, reviewKey, type ReviewRecord, reviewRecord, type ReviewTarget } from "../shared/rpc";
 import { preferences } from "../shared/settings";
 import { type GitHubRemote, git, githubRemotes, gitOk, parseGitHubRepo } from "./git";
+import { readConfigFile, writeConfigFile } from "./storage";
 
 type Paseo = PluginHandlerContext["paseo"];
 type Preferences = PluginSettings<typeof preferences.schema>;
@@ -27,7 +29,35 @@ interface Located {
 }
 
 const JOB_RETENTION_MS = 10 * 60 * 1000;
+const RECORDS_FILE = "reviews.json";
+const RECORD_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 const jobs = new Map<string, Job>();
+let records: Map<string, ReviewRecord> | null = null;
+let writes: Promise<unknown> = Promise.resolve();
+
+async function loadRecords(): Promise<Map<string, ReviewRecord>> {
+  if (!records) {
+    const text = await readConfigFile(RECORDS_FILE);
+    let stored: ReviewRecord[] = [];
+    try {
+      stored = z.array(reviewRecord).parse(JSON.parse(text ?? ""));
+    } catch {}
+    records ??= new Map(stored.map((record) => [record.key, record]));
+  }
+  return records;
+}
+
+async function saveRecord(record: ReviewRecord): Promise<void> {
+  const map = await loadRecords();
+  map.set(record.key, record);
+  const cutoff = new Date(Date.now() - RECORD_RETENTION_MS).toISOString();
+  for (const [key, entry] of map) {
+    if (entry.reviewedAt < cutoff) map.delete(key);
+  }
+  const next = writes.then(() => writeConfigFile(RECORDS_FILE, JSON.stringify([...map.values()])));
+  writes = next.catch(() => undefined);
+  await next;
+}
 
 function sameRepo(a: string | null | undefined, b: string): boolean {
   return !!a && a.toLowerCase() === b.toLowerCase();
@@ -37,8 +67,14 @@ function expandHome(path: string): string {
   return path === "~" || path.startsWith("~/") ? join(homedir(), path.slice(1)) : path;
 }
 
-function renderPrompt(template: string, target: ReviewTarget, branch: string): string {
+function renderPrompt(
+  template: string,
+  target: ReviewTarget,
+  branch: string,
+  extra: Record<string, string> = {},
+): string {
   const values: Record<string, string> = {
+    ...extra,
     number: String(target.number),
     branch,
     base: target.baseRefName,
@@ -121,6 +157,22 @@ async function findWorkspace(
   return null;
 }
 
+async function liveWorkspace(paseo: Paseo, id: string): Promise<Workspace | null> {
+  const workspace = await paseo.workspaces.ref(id).refresh().catch(() => null);
+  return workspace && !workspace.archivingAt ? workspace : null;
+}
+
+async function liveAgent(paseo: Paseo, id: string) {
+  const agent = paseo.agents.ref(id);
+  const snapshot = await agent.refresh().catch(() => null);
+  return snapshot && !snapshot.agent.archivedAt ? agent : null;
+}
+
+async function autoModeId(paseo: Paseo, provider: string): Promise<string | undefined> {
+  const result = await paseo.providers.listModes(provider.split("/")[0] ?? provider).catch(() => null);
+  return result?.modes?.find((mode) => /^auto\b/i.test(mode.label))?.id;
+}
+
 async function updateWorkspace(directory: string, trackingRef: string, warnings: string[]): Promise<void> {
   if (await git(directory, ["status", "--porcelain"]).catch(() => "")) {
     warnings.push("The existing workspace has uncommitted changes, so it was not updated to the latest PR commit.");
@@ -172,12 +224,16 @@ async function runReview(job: Job, target: ReviewTarget, paseo: Paseo, settings:
   ]);
 
   job.step = "Looking for an existing workspace";
-  const existing = await findWorkspace(paseo, located, target, branch);
+  const previous = (await loadRecords()).get(job.key);
+  const previousWorkspace = previous ? await liveWorkspace(paseo, previous.workspaceId) : null;
+  const existing = previousWorkspace ?? (await findWorkspace(paseo, located, target, branch));
   let workspace;
+  let reviewedSha: string;
   if (existing) {
-    job.reusedWorkspace = true;
-    await updateWorkspace(existing.workspaceDirectory ?? existing.projectRootPath, trackingRef, job.warnings);
+    const directory = existing.workspaceDirectory ?? existing.projectRootPath;
+    await updateWorkspace(directory, trackingRef, job.warnings);
     workspace = paseo.workspaces.ref(existing.id);
+    reviewedSha = await git(directory, ["rev-parse", "HEAD"]);
   } else {
     await prepareBranch(located.root, branch, trackingRef, job.warnings);
     job.step = "Creating worktree";
@@ -185,16 +241,48 @@ async function runReview(job: Job, target: ReviewTarget, paseo: Paseo, settings:
       title: `Review #${target.number}: ${target.title}`.slice(0, 80),
       source: { kind: "worktree", cwd: located.root, action: "checkout", refName: branch },
     });
+    reviewedSha = await git(located.root, ["rev-parse", `refs/heads/${branch}`]);
   }
   job.workspaceId = workspace.id;
 
-  job.step = "Starting review agent";
-  const agent = await workspace.agents.create({
-    config: { provider: prefs.reviewProvider },
-    title: `Code review #${target.number}`,
-    prompt: renderPrompt(prefs.reviewPrompt, target, branch),
+  const previousAgent = previous && previousWorkspace ? await liveAgent(paseo, previous.agentId) : null;
+  if (previous && previousAgent) {
+    job.agentId = previousAgent.id;
+    if (reviewedSha === previous.headSha) {
+      job.outcome = "unchanged";
+      return;
+    }
+    job.step = "Asking the review agent to re-review";
+    await previousAgent.send(
+      renderPrompt(prefs.followUpPrompt, target, branch, {
+        previous: previous.headSha.slice(0, 12),
+        head: reviewedSha.slice(0, 12),
+      }),
+    );
+    job.outcome = "follow_up";
+  } else {
+    job.step = "Starting review agent";
+    const modeId = await autoModeId(paseo, prefs.reviewProvider);
+    const agent = await workspace.agents.create({
+      config: { provider: prefs.reviewProvider, ...(modeId ? { modeId } : {}) },
+      title: `Code review #${target.number}`,
+      prompt: renderPrompt(prefs.reviewPrompt, target, branch),
+    });
+    job.agentId = agent.id;
+    job.outcome = existing ? "existing_workspace" : "new_workspace";
+  }
+
+  await saveRecord({
+    key: job.key,
+    workspaceId: workspace.id,
+    agentId: job.agentId,
+    headSha: reviewedSha,
+    reviewedAt: new Date().toISOString(),
   });
-  job.agentId = agent.id;
+}
+
+export async function currentReviewRecords(): Promise<ReviewRecord[]> {
+  return [...(await loadRecords()).values()];
 }
 
 export function currentReviewJobs(): ReviewJob[] {
@@ -217,7 +305,7 @@ export function startReviewJob(target: ReviewTarget, paseo: Paseo, settings: Pre
     step: "Starting",
     workspaceId: null,
     agentId: null,
-    reusedWorkspace: false,
+    outcome: null,
     error: null,
     warnings: [],
     finishedAt: null,
@@ -226,7 +314,7 @@ export function startReviewJob(target: ReviewTarget, paseo: Paseo, settings: Pre
   runReview(job, target, paseo, settings).then(
     () => {
       job.state = "done";
-      job.step = "Review started";
+      job.step = job.outcome === "unchanged" ? "Already reviewed" : "Review started";
       job.finishedAt = Date.now();
     },
     (error: unknown) => {

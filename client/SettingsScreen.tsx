@@ -15,6 +15,7 @@ import { useRef, useState } from "react";
 import { Text } from "react-native";
 import { type AuthStatus, clearToken, getAuthStatus, saveToken } from "../shared/rpc";
 import {
+  DEFAULT_FOLLOW_UP_PROMPT,
   DEFAULT_READY_PATTERN,
   DEFAULT_REVIEW_PROMPT,
   DEFAULT_REVIEW_PROVIDER,
@@ -247,6 +248,13 @@ function PreferencesForm({
             initialValue={values.reviewPrompt}
             placeholder={DEFAULT_REVIEW_PROMPT}
             onChangeText={(text) => setDraft({ ...draft, reviewPrompt: text.trim() ? text : DEFAULT_REVIEW_PROMPT })}
+          />
+          <SettingsInput
+            label="Re-review prompt"
+            hint="Sent to the previous review agent when the pull request has new commits since its review. Adds {previous} and {head} for the reviewed and new commits."
+            initialValue={values.followUpPrompt}
+            placeholder={DEFAULT_FOLLOW_UP_PROMPT}
+            onChangeText={(text) => setDraft({ ...draft, followUpPrompt: text.trim() ? text : DEFAULT_FOLLOW_UP_PROMPT })}
           />
           <SettingsInput
             label="Clone folder"

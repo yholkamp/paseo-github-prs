@@ -3,7 +3,7 @@ import { readOwnerFilter, saveOwnerFilter } from "./server/filter";
 import { fetchViewer } from "./server/github";
 import { loadMentions, markMentionsDone } from "./server/mentions";
 import { authStatus, loadOverview } from "./server/overview";
-import { currentReviewJobs, startReviewJob } from "./server/review";
+import { currentReviewJobs, currentReviewRecords, startReviewJob } from "./server/review";
 import { deleteStoredToken, storeToken } from "./server/token";
 import {
   clearToken,
@@ -28,7 +28,7 @@ export default function contribute(server: PluginServerContext) {
   server.handle(getOwnerFilter, () => readOwnerFilter());
   server.handle(setOwnerFilter, (filter) => saveOwnerFilter(filter));
   server.handle(startReview, (target, { paseo }) => startReviewJob(target, paseo, settings));
-  server.handle(listReviewJobs, () => ({ jobs: currentReviewJobs() }));
+  server.handle(listReviewJobs, async () => ({ jobs: currentReviewJobs(), reviews: await currentReviewRecords() }));
   server.handle(getAuthStatus, () => authStatus());
   server.handle(saveToken, async ({ token }) => {
     await fetchViewer(token.trim());

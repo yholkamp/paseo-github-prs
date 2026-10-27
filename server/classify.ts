@@ -138,6 +138,7 @@ export function describe(pr: RawPullRequest, rules: ReviewRules): Base {
     isDraft: pr.isDraft,
     updatedAt: pr.updatedAt,
     headRefName: pr.headRefName,
+    headSha: pr.headRefOid,
     baseRefName: pr.baseRefName,
     isCrossRepository: pr.isCrossRepository,
     ...ciSummary(pr),

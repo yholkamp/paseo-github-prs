@@ -25,6 +25,7 @@ export const pullRequest = z.object({
   isDraft: z.boolean(),
   updatedAt: z.string(),
   headRefName: z.string(),
+  headSha: z.string().default(""),
   baseRefName: z.string(),
   isCrossRepository: z.boolean(),
   ci: ciState,
@@ -145,6 +146,10 @@ export const reviewTarget = z.object({
 
 export type ReviewTarget = z.infer<typeof reviewTarget>;
 
+export const reviewOutcome = z.enum(["new_workspace", "existing_workspace", "follow_up", "unchanged"]);
+
+export type ReviewOutcome = z.infer<typeof reviewOutcome>;
+
 export const reviewJob = z.object({
   id: z.string(),
   key: z.string(),
@@ -152,12 +157,22 @@ export const reviewJob = z.object({
   step: z.string(),
   workspaceId: z.string().nullable(),
   agentId: z.string().nullable(),
-  reusedWorkspace: z.boolean(),
+  outcome: reviewOutcome.nullable(),
   error: z.string().nullable(),
   warnings: z.array(z.string()),
 });
 
 export type ReviewJob = z.infer<typeof reviewJob>;
+
+export const reviewRecord = z.object({
+  key: z.string(),
+  workspaceId: z.string(),
+  agentId: z.string(),
+  headSha: z.string(),
+  reviewedAt: z.string(),
+});
+
+export type ReviewRecord = z.infer<typeof reviewRecord>;
 
 export function reviewKey(repo: string, number: number): string {
   return `${repo.toLowerCase()}#${number}`;
@@ -172,7 +187,7 @@ export const startReview = defineRpc({
 export const listReviewJobs = defineRpc({
   name: "github.review.jobs",
   input: z.object({}),
-  output: z.object({ jobs: z.array(reviewJob) }),
+  output: z.object({ jobs: z.array(reviewJob), reviews: z.array(reviewRecord) }),
 });
 
 export const getAuthStatus = defineRpc({

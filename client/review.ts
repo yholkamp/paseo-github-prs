@@ -3,14 +3,32 @@ import { useRpc } from "@getpaseo/plugin/client";
 import { useToast } from "@getpaseo/plugin/client/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
-import { listReviewJobs, type PullRequest, type ReviewJob, reviewKey, startReview } from "../shared/rpc";
+import {
+  listReviewJobs,
+  type PullRequest,
+  type ReviewJob,
+  type ReviewOutcome,
+  type ReviewRecord,
+  reviewKey,
+  startReview,
+} from "../shared/rpc";
 
 const REVIEW_JOBS_KEY = ["github-prs", "review-jobs"] as const;
 
+const STARTED: Record<ReviewOutcome, string> = {
+  new_workspace: "Review started in a new worktree.",
+  existing_workspace: "Review started in the existing workspace.",
+  follow_up: "Re-review started in the previous review session.",
+  unchanged: "No new commits since the last review.",
+};
+
+type ReviewSession = Pick<ReviewJob, "agentId" | "workspaceId">;
+
 export interface Reviews {
   jobFor(pr: PullRequest): ReviewJob | undefined;
+  recordFor(pr: PullRequest): ReviewRecord | undefined;
   start(pr: PullRequest): void;
-  open(job: ReviewJob): void;
+  open(session: ReviewSession): void;
 }
 
 export function useReviews(navigation: PluginScreenProps["navigation"]): Reviews {
@@ -46,9 +64,9 @@ export function useReviews(navigation: PluginScreenProps["navigation"]): Reviews
     },
   });
 
-  const open = (job: ReviewJob) => {
-    if (job.agentId && navigation) navigation.openAgent({ agentId: job.agentId });
-    else if (job.workspaceId && navigation) navigation.openWorkspace({ workspaceId: job.workspaceId });
+  const open = (session: ReviewSession) => {
+    if (session.agentId && navigation) navigation.openAgent({ agentId: session.agentId });
+    else if (session.workspaceId && navigation) navigation.openWorkspace({ workspaceId: session.workspaceId });
   };
 
   useEffect(() => {
@@ -58,9 +76,8 @@ export function useReviews(navigation: PluginScreenProps["navigation"]): Reviews
         toast.error(`Review failed: ${job.error ?? "unknown error"}`);
         continue;
       }
-      const where = job.reusedWorkspace ? "in the existing workspace" : "in a new worktree";
       const warning = job.warnings.length ? ` ${job.warnings.join(" ")}` : "";
-      toast.show(`Review started ${where}.${warning}`, {
+      toast.show(`${STARTED[job.outcome ?? "new_workspace"]}${warning}`, {
         variant: job.warnings.length ? "warning" : "success",
         durationMs: job.warnings.length ? 6000 : 2200,
       });
@@ -77,8 +94,14 @@ export function useReviews(navigation: PluginScreenProps["navigation"]): Reviews
     return map;
   }, [jobs.data]);
 
+  const records = useMemo(
+    () => new Map((jobs.data?.reviews ?? []).map((record) => [record.key, record])),
+    [jobs.data],
+  );
+
   return {
     jobFor: (pr) => byKey.get(reviewKey(pr.repo, pr.number)),
+    recordFor: (pr) => records.get(reviewKey(pr.repo, pr.number)),
     start: (pr) => start.mutate(pr),
     open,
   };
