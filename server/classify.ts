@@ -176,7 +176,6 @@ function isApproved(pr: Base): boolean {
 }
 
 export function mySection(pr: Base): MySection {
-  if (pr.isDraft) return "draft";
   if (pr.conflicting || pr.ci === "failure" || pr.reviewDecision === "changes_requested") return "action";
   if (pr.newComments > 0) return "comments";
   if (isApproved(pr)) return pr.ci === "pending" ? "checks" : "merge";
@@ -184,7 +183,6 @@ export function mySection(pr: Base): MySection {
 }
 
 export function reviewSection(pr: Base, skipOthersReviewing: boolean): ReviewSection {
-  if (pr.isDraft) return "draft";
   if (!pr.myReview && isApproved(pr)) return "approved";
   if (pr.stage !== "ready") return "bot";
   if (!pr.myReview) return skipOthersReviewing && pr.otherReviewers.length > 0 ? "others" : "ready";

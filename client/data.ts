@@ -82,7 +82,6 @@ export const MY_SECTIONS: SectionInfo<MySection>[] = [
   { id: "checks", title: "Approved, checks running", collapsed: false },
   { id: "review", title: "Awaiting review", collapsed: false },
   { id: "bot", title: "Not marked ready for review yet", collapsed: false },
-  { id: "draft", title: "Drafts", collapsed: true },
 ];
 
 export const REVIEW_SECTIONS: SectionInfo<ReviewSection>[] = [
@@ -92,7 +91,6 @@ export const REVIEW_SECTIONS: SectionInfo<ReviewSection>[] = [
   { id: "others", title: "Others reviewing", collapsed: true },
   { id: "approved", title: "Approved by others", collapsed: true },
   { id: "bot", title: "Still with the review bot", collapsed: true },
-  { id: "draft", title: "Drafts", collapsed: true },
 ];
 
 export const MENTION_SECTIONS: SectionInfo<MentionSection>[] = [

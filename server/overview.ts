@@ -11,7 +11,7 @@ type Values = ReturnType<typeof preferences.schema.parse>;
 
 const cache = new SharedCache<Omit<Overview, "stale">>("cache-overview.json");
 
-const BASE_QUERY = "is:pr is:open archived:false";
+const BASE_QUERY = "is:pr is:open draft:false archived:false";
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 function byUpdated(a: PullRequest, b: PullRequest): number {

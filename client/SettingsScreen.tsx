@@ -210,7 +210,7 @@ function PreferencesForm({
           <SettingsInput
             ref={queryInput}
             label="Add search"
-            hint="GitHub search qualifiers, run as “is:pr is:open archived:false <search>”. Your own PRs are excluded. Examples: team-review-requested:acme/backend, org:acme mentions:@me."
+            hint="GitHub search qualifiers, run as “is:pr is:open draft:false archived:false <search>”. Your own PRs are excluded. Examples: team-review-requested:acme/backend, org:acme mentions:@me."
             placeholder="org:acme team-review-requested:acme/backend"
             onChangeText={setNewQuery}
           />
