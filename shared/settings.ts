@@ -8,6 +8,8 @@ export const DEFAULT_REVIEW_PROMPT = "/code-review high {branch}";
 export const DEFAULT_FOLLOW_UP_PROMPT =
   "The pull request has new commits since your last review ({previous}..{head}) and the workspace is updated to {head}. Review the changes since your last review the same way, and for each issue you raised before, say whether it was addressed.";
 
+export const NIGHTLY_REVIEW_TITLE = "GitHub PRs nightly review";
+
 export const DEFAULT_REVIEW_QUERIES = ["review-requested:@me", "reviewed-by:@me"];
 
 export const preferences = defineSettings({
@@ -30,6 +32,7 @@ export const preferences = defineSettings({
     reviewPrompt: z.string().default(DEFAULT_REVIEW_PROMPT),
     followUpPrompt: z.string().default(DEFAULT_FOLLOW_UP_PROMPT),
     cloneDirectory: z.string().default(""),
+    nightlyStaggerMinutes: z.number().int().min(1).max(60).default(10),
   }),
 });
 

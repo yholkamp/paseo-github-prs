@@ -2,6 +2,7 @@ import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { readOwnerFilter, saveOwnerFilter } from "./server/filter";
 import { fetchViewer } from "./server/github";
 import { loadMentions, markMentionsDone } from "./server/mentions";
+import { startNightlyReviews, stopNightlyReviews } from "./server/nightly";
 import { authStatus, loadOverview } from "./server/overview";
 import { currentReviewJobs, currentReviewRecords, startReviewJob } from "./server/review";
 import { deleteStoredToken, storeToken } from "./server/token";
@@ -17,7 +18,7 @@ import {
   setOwnerFilter,
   startReview,
 } from "./shared/rpc";
-import { preferences } from "./shared/settings";
+import { NIGHTLY_REVIEW_TITLE, preferences } from "./shared/settings";
 
 export default function contribute(server: PluginServerContext) {
   const settings = server.registerSettings(preferences);
@@ -40,5 +41,12 @@ export default function contribute(server: PluginServerContext) {
     return authStatus();
   });
 
-  return () => {};
+  server.on("agent.created", async ({ agent }, { paseo }) => {
+    if (agent.title?.trim() !== NIGHTLY_REVIEW_TITLE) return;
+    const snapshot = await paseo.agents.ref(agent.id).refresh().catch(() => null);
+    if (!snapshot?.agent.labels?.["paseo.schedule-id"]) return;
+    void startNightlyReviews(paseo, settings);
+  });
+
+  return () => stopNightlyReviews();
 }

@@ -21,6 +21,7 @@ import {
   DEFAULT_REVIEW_PROVIDER,
   DEFAULT_REVIEW_QUERIES,
   isValidPattern,
+  NIGHTLY_REVIEW_TITLE,
   preferences,
 } from "../shared/settings";
 import { AUTH_KEY, MENTIONS_KEY, OVERVIEW_KEY } from "./data";
@@ -48,6 +49,13 @@ const MENTION_DAY_OPTIONS = [
   { label: "14 days", value: "14" },
   { label: "30 days", value: "30" },
   { label: "90 days", value: "90" },
+];
+
+const STAGGER_OPTIONS = [
+  { label: "5 minutes", value: "5" },
+  { label: "10 minutes", value: "10" },
+  { label: "15 minutes", value: "15" },
+  { label: "30 minutes", value: "30" },
 ];
 
 const ACTIVITY_WEEK_OPTIONS = [
@@ -288,6 +296,13 @@ function PreferencesForm({
             initialValue={values.cloneDirectory}
             placeholder="~/workspace"
             onChangeText={(cloneDirectory) => setDraft({ ...draft, cloneDirectory })}
+          />
+          <SettingsSelect
+            label="Nightly review spacing"
+            hint={`Time between review agents in a nightly run. A run starts when a Paseo schedule whose prompt starts with the line “${NIGHTLY_REVIEW_TITLE}” fires.`}
+            value={String(draft.nightlyStaggerMinutes)}
+            options={STAGGER_OPTIONS}
+            onValueChange={(value) => setDraft({ ...draft, nightlyStaggerMinutes: Number(value) })}
           />
         </SettingsCard>
       </SettingsSection>
