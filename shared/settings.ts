@@ -4,9 +4,15 @@ import { z } from "zod";
 export const DEFAULT_READY_PATTERN = "ready for (a |human |another )?review";
 
 export const DEFAULT_REVIEW_PROVIDER = "claude/claude-opus-5-5";
-export const DEFAULT_REVIEW_PROMPT = "/code-review high {branch}";
-export const DEFAULT_FOLLOW_UP_PROMPT =
+const REVIEW_GROUPING =
+  "When the review is done, end your reply with the findings grouped under three headings: Required before merging, Not blocking, and Minor nits. Write None under a heading without findings.";
+
+const V1_REVIEW_PROMPT = "/code-review high {branch}";
+const V1_FOLLOW_UP_PROMPT =
   "The pull request has new commits since your last review ({previous}..{head}) and the workspace is updated to {head}. Review the changes since your last review the same way, and for each issue you raised before, say whether it was addressed.";
+
+export const DEFAULT_REVIEW_PROMPT = `${V1_REVIEW_PROMPT} ${REVIEW_GROUPING}`;
+export const DEFAULT_FOLLOW_UP_PROMPT = `${V1_FOLLOW_UP_PROMPT} ${REVIEW_GROUPING}`;
 
 export const NIGHTLY_REVIEW_TITLE = "GitHub PRs nightly review";
 
@@ -15,7 +21,16 @@ export const DEFAULT_REVIEW_QUERIES = ["review-requested:@me", "reviewed-by:@me"
 export const preferences = defineSettings({
   id: "preferences",
   scope: "host",
-  version: 1,
+  version: 2,
+  migrate: (values) => {
+    if (!values || typeof values !== "object") return values;
+    const stored = values as Record<string, unknown>;
+    return {
+      ...stored,
+      ...(stored.reviewPrompt === V1_REVIEW_PROMPT ? { reviewPrompt: DEFAULT_REVIEW_PROMPT } : {}),
+      ...(stored.followUpPrompt === V1_FOLLOW_UP_PROMPT ? { followUpPrompt: DEFAULT_FOLLOW_UP_PROMPT } : {}),
+    };
+  },
   schema: z.object({
     readyPattern: z.string().default(DEFAULT_READY_PATTERN),
     reviewBotLogins: z.array(z.string()).default([]),
