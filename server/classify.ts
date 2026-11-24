@@ -22,6 +22,19 @@ export function normalizeLogin(login: string): string {
   return login.trim().toLowerCase().replace(/\[bot\]$/, "");
 }
 
+export function stripNoise(body: string): string {
+  return body
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .split("\n")
+    .filter((line) => !/^\s*>/.test(line))
+    .join("\n");
+}
+
+function mentionedLogins(body: string): string[] {
+  const text = stripNoise(body).replace(/```[\s\S]*?```/g, "").replace(/`[^`\n]*`/g, "");
+  return [...text.matchAll(/(?:^|[^\w/@.-])@([a-z\d][a-z\d-]*)(?![\w/-])/gi)].map((match) => match[1]!);
+}
+
 function latest(times: Array<string | null | undefined>): string | null {
   let result: string | null = null;
   for (const time of times) {
@@ -134,6 +147,20 @@ export function describe(pr: RawPullRequest, rules: ReviewRules): Base {
     ),
   ];
 
+  const human = [...comments, ...reviews].filter(
+    (entry) => entry.author && entry.author.__typename !== "Bot" && !isMe(entry.author),
+  );
+  const botsHere = [...comments, ...reviews].flatMap((entry) =>
+    entry.author?.__typename === "Bot" ? [normalizeLogin(entry.author.login)] : [],
+  );
+  const notOthers = new Set([viewer, prAuthor, ...rules.botLogins, ...botsHere]);
+  const mentioned = human.flatMap((entry) => mentionedLogins(entry.body));
+  const mentionedOthers = mentioned.some((login) => normalizeLogin(login) === viewer)
+    ? []
+    : [...new Map(mentioned.map((login) => [normalizeLogin(login), login])).entries()]
+        .filter(([normalized]) => !notOthers.has(normalized))
+        .map(([, login]) => login);
+
   const changedSinceMyReview =
     myReview !== null &&
     (myLatest!.commit?.oid !== pr.headRefOid || (!!readyAt && readyAt > myLatest!.submittedAt!));
@@ -166,6 +193,7 @@ export function describe(pr: RawPullRequest, rules: ReviewRules): Base {
     readyAt,
     myReview,
     otherReviewers,
+    mentionedOthers,
     changedSinceMyReview,
     newComments,
   };
@@ -185,6 +213,8 @@ export function mySection(pr: Base): MySection {
 export function reviewSection(pr: Base, skipOthersReviewing: boolean): ReviewSection {
   if (!pr.myReview && isApproved(pr)) return "approved";
   if (pr.stage !== "ready") return "bot";
-  if (!pr.myReview) return skipOthersReviewing && pr.otherReviewers.length > 0 ? "others" : "ready";
+  if (!pr.myReview) {
+    return skipOthersReviewing && (pr.otherReviewers.length > 0 || pr.mentionedOthers.length > 0) ? "others" : "ready";
+  }
   return pr.changedSinceMyReview ? "rereview" : "reviewed";
 }

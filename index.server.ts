@@ -2,6 +2,7 @@ import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { readOwnerFilter, saveOwnerFilter } from "./server/filter";
 import { fetchViewer } from "./server/github";
 import { loadMentions, markMentionsDone } from "./server/mentions";
+import { loadMerged } from "./server/merged";
 import { startNightlyReviews, stopNightlyReviews } from "./server/nightly";
 import { authStatus, loadOverview } from "./server/overview";
 import { currentReviewJobs, currentReviewRecords, startReviewJob } from "./server/review";
@@ -10,6 +11,7 @@ import {
   clearToken,
   getAuthStatus,
   getMentions,
+  getMerged,
   getOverview,
   getOwnerFilter,
   listReviewJobs,
@@ -25,6 +27,7 @@ export default function contribute(server: PluginServerContext) {
 
   server.handle(getOverview, ({ allowStale }) => loadOverview(settings, !!allowStale));
   server.handle(getMentions, ({ allowStale }) => loadMentions(settings, !!allowStale));
+  server.handle(getMerged, ({ allowStale }) => loadMerged(settings, !!allowStale));
   server.handle(setMentionsDone, ({ ids, done }) => markMentionsDone(ids, done));
   server.handle(getOwnerFilter, () => readOwnerFilter());
   server.handle(setOwnerFilter, (filter) => saveOwnerFilter(filter));

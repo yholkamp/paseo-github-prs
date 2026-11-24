@@ -38,6 +38,7 @@ export const pullRequest = z.object({
   readyAt: z.string().nullable(),
   myReview: z.enum(["approved", "changes_requested", "commented"]).nullable(),
   otherReviewers: z.array(z.string()).default([]),
+  mentionedOthers: z.array(z.string()).default([]),
   changedSinceMyReview: z.boolean(),
   newComments: z.number(),
   section: z.string(),
@@ -66,6 +67,43 @@ export const getOverview = defineRpc({
   name: "github.overview",
   input: cachedInput,
   output: overview,
+});
+
+export const mergedSections = ["merged", "staging", "production", "unchecked", "untracked"] as const;
+export type MergedSection = (typeof mergedSections)[number];
+
+const environmentBranch = z.object({ branch: z.string(), contains: z.boolean().nullable() });
+
+export const mergedPullRequest = z.object({
+  id: z.string(),
+  number: z.number(),
+  title: z.string(),
+  url: z.string(),
+  repo: z.string(),
+  baseRefName: z.string(),
+  headRefName: z.string(),
+  mergedAt: z.string(),
+  staging: environmentBranch.nullable(),
+  production: environmentBranch.nullable(),
+  section: z.enum(mergedSections),
+});
+
+export type MergedPullRequest = z.infer<typeof mergedPullRequest>;
+
+export const merged = z.object({
+  login: z.string(),
+  prs: z.array(mergedPullRequest),
+  warnings: z.array(z.string()),
+  fetchedAt: z.string(),
+  stale: z.boolean(),
+});
+
+export type Merged = z.infer<typeof merged>;
+
+export const getMerged = defineRpc({
+  name: "github.merged",
+  input: cachedInput,
+  output: merged,
 });
 
 export const mentionSections = ["unanswered", "answered", "done"] as const;

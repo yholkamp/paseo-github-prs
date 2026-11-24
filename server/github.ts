@@ -397,3 +397,96 @@ export async function searchMentions(
   });
   return { login: search.login, targets, warnings: [...new Set([...search.warnings, ...details.warnings])] };
 }
+
+export interface RawMergedPullRequest {
+  id: string;
+  number: number;
+  title: string;
+  url: string;
+  mergedAt: string;
+  baseRefName: string;
+  headRefName: string;
+  mergeCommit: { oid: string } | null;
+  repository: { nameWithOwner: string };
+}
+
+export async function searchMergedPullRequests(
+  token: string,
+  query: string,
+): Promise<{ login: string; prs: RawMergedPullRequest[]; warnings: string[] }> {
+  const { data, warnings } = await graphql<{
+    viewer: { login: string };
+    search: { nodes: Array<Partial<RawMergedPullRequest> | null> } | null;
+  }>(
+    token,
+    `query($q: String!) {
+      viewer { login }
+      search(query: $q, type: ISSUE, first: 50) {
+        nodes {
+          ... on PullRequest {
+            id number title url mergedAt baseRefName headRefName
+            mergeCommit { oid }
+            repository { nameWithOwner }
+          }
+        }
+      }
+    }`,
+    { q: query },
+  );
+  const prs = (data.search?.nodes ?? []).filter(
+    (node): node is RawMergedPullRequest => typeof node?.id === "string" && typeof node.mergedAt === "string",
+  );
+  return { login: data.viewer.login, prs, warnings };
+}
+
+const COMPARES_PER_QUERY = 60;
+
+type Comparison = "AHEAD" | "BEHIND" | "DIVERGED" | "IDENTICAL";
+
+export async function branchesContaining(
+  token: string,
+  repo: string,
+  branches: string[],
+  oids: string[],
+): Promise<{ contains: Map<string, Map<string, boolean | null>>; warnings: string[] }> {
+  const [owner, name] = repo.split("/");
+  const contains = new Map<string, Map<string, boolean | null>>();
+  const warnings: string[] = [];
+  const perQuery = Math.max(1, Math.floor(COMPARES_PER_QUERY / Math.max(1, branches.length)));
+
+  for (let start = 0; start < oids.length; start += perQuery) {
+    const chunk = oids.slice(start, start + perQuery);
+    const params = [
+      "$owner: String!",
+      "$name: String!",
+      ...branches.map((_, index) => `$b${index}: String!`),
+      ...chunk.map((_, index) => `$o${index}: String!`),
+    ].join(", ");
+    const compares = chunk.map((_, index) => `c${index}: compare(headRef: $o${index}) { status }`).join(" ");
+    const refs = branches.map((_, index) => `b${index}: ref(qualifiedName: $b${index}) { name ${compares} }`).join("\n");
+    const variables: Record<string, string> = {
+      owner: owner!,
+      name: name!,
+      ...Object.fromEntries(branches.map((branch, index) => [`b${index}`, `refs/heads/${branch}`])),
+      ...Object.fromEntries(chunk.map((oid, index) => [`o${index}`, oid])),
+    };
+    type Ref = ({ name: string } & Record<string, { status: Comparison } | null>) | null;
+    const result = await graphql<{ repository: Record<string, Ref> | null }>(
+      token,
+      `query(${params}) { repository(owner: $owner, name: $name) { ${refs} } }`,
+      variables,
+    );
+    warnings.push(...result.warnings);
+    branches.forEach((branch, index) => {
+      const ref = result.data.repository?.[`b${index}`];
+      if (!ref) return;
+      const statuses = contains.get(branch) ?? new Map<string, boolean | null>();
+      chunk.forEach((oid, oidIndex) => {
+        const status = ref[`c${oidIndex}`]?.status;
+        statuses.set(oid, status ? status === "BEHIND" || status === "IDENTICAL" : null);
+      });
+      contains.set(branch, statuses);
+    });
+  }
+  return { contains, warnings };
+}

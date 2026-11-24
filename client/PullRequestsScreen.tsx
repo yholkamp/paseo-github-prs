@@ -12,14 +12,17 @@ import {
   reviewCount,
   type SectionInfo,
   timeAgo,
+  unreleasedCount,
   useMentions,
+  useMerged,
   useOverview,
 } from "./data";
-import { type Filter, filterMentions, filterOverview, ownersIn, useOwnerFilter } from "./filter";
+import { type Filter, filterMentions, filterMerged, filterOverview, ownersIn, useOwnerFilter } from "./filter";
 import { MentionsList } from "./Mentions";
+import { MergedList } from "./Merged";
 import { type Reviews, useReviews } from "./review";
 
-type Tab = "reviews" | "mine" | "mentions";
+type Tab = "reviews" | "mine" | "merged" | "mentions";
 
 interface Props extends PluginScreenProps {
   openSettings(): void;
@@ -62,6 +65,10 @@ function badgesFor(pr: PullRequest, tab: Tab): BadgeSpec[] {
       const names = pr.otherReviewers.slice(0, 2).join(", ");
       const more = pr.otherReviewers.length > 2 ? ` +${pr.otherReviewers.length - 2}` : "";
       badges.push({ label: `Reviewed by ${names}${more}`, tone: "muted", icon: "Users" });
+    } else if (pr.mentionedOthers.length > 0) {
+      const names = pr.mentionedOthers.slice(0, 2).map((login) => `@${login}`).join(", ");
+      const more = pr.mentionedOthers.length > 2 ? ` +${pr.mentionedOthers.length - 2}` : "";
+      badges.push({ label: `Mentions ${names}${more}`, tone: "muted", icon: "Users" });
     }
     if (pr.changedSinceMyReview) badges.push({ label: "Updated since your review", tone: "warning", icon: "RefreshCw" });
   }
@@ -232,7 +239,7 @@ function PullRequestList({
 }
 
 function initialTab(value: string | undefined): Tab {
-  return value === "mine" || value === "mentions" ? value : "reviews";
+  return value === "mine" || value === "merged" || value === "mentions" ? value : "reviews";
 }
 
 export function PullRequestsScreen({ theme, layout, params, navigation, openSettings }: Props) {
@@ -241,10 +248,12 @@ export function PullRequestsScreen({ theme, layout, params, navigation, openSett
   const [tab, setTab] = useState<Tab>(initialTab(params.tab));
   const overview = useOverview();
   const mentions = useMentions();
+  const merged = useMerged();
   const filter = useOwnerFilter();
-  const active = tab === "mentions" ? mentions : overview;
+  const active = tab === "mentions" ? mentions : tab === "merged" ? merged : overview;
   const overviewData = filterOverview(overview.data, filter);
   const mentionsData = filterMentions(mentions.data, filter);
+  const mergedData = filterMerged(merged.data, filter);
 
   if (overview.isPending && mentions.isPending) {
     return <Loading />;
@@ -253,16 +262,19 @@ export function PullRequestsScreen({ theme, layout, params, navigation, openSett
   const tabs: Array<[Tab, string]> = [
     ["reviews", `To review · ${reviewCount(overviewData)}`],
     ["mine", `My PRs · ${overviewData?.mine.length ?? 0}`],
+    ["merged", `Merged · ${unreleasedCount(mergedData)}`],
     ["mentions", `Mentions · ${mentionCount(mentionsData)}`],
   ];
-  const warnings = [...new Set([...(overview.data?.warnings ?? []), ...(mentions.data?.warnings ?? [])])];
+  const warnings = [
+    ...new Set([...(overview.data?.warnings ?? []), ...(mentions.data?.warnings ?? []), ...(merged.data?.warnings ?? [])]),
+  ];
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.toolbar}>
         <Text style={styles.toolbarText} numberOfLines={1}>
           {active.data ? `@${active.data.login} · updated ${timeAgo(active.data.fetchedAt)}` : "GitHub"}
-          {overview.isFetching || mentions.isFetching ? " · refreshing…" : ""}
+          {overview.isFetching || mentions.isFetching || merged.isFetching ? " · refreshing…" : ""}
         </Text>
         <Pressable
           accessibilityRole="button"
@@ -270,6 +282,7 @@ export function PullRequestsScreen({ theme, layout, params, navigation, openSett
           onPress={() => {
             void overview.refetch();
             void mentions.refetch();
+            void merged.refetch();
           }}
           style={styles.iconButton}
         >
@@ -290,7 +303,7 @@ export function PullRequestsScreen({ theme, layout, params, navigation, openSett
         </View>
       ) : null}
 
-      <OwnerFilterBar owners={ownersIn(overview.data, mentions.data, filter)} filter={filter} styles={styles} />
+      <OwnerFilterBar owners={ownersIn(overview.data, mentions.data, merged.data, filter)} filter={filter} styles={styles} />
 
       <View style={styles.tabs} accessibilityRole="tablist">
         {tabs.map(([id, label]) => (
@@ -321,6 +334,8 @@ export function PullRequestsScreen({ theme, layout, params, navigation, openSett
         <Loading />
       ) : tab === "mentions" ? (
         mentionsData ? <MentionsList data={mentionsData} filtered={filter.active} theme={theme} styles={styles} /> : null
+      ) : tab === "merged" ? (
+        mergedData ? <MergedList data={mergedData} filtered={filter.active} theme={theme} styles={styles} /> : null
       ) : overviewData ? (
         <PullRequestList
           prs={tab === "mine" ? overviewData.mine : overviewData.reviews}

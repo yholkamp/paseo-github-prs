@@ -1,7 +1,7 @@
 import { useRpc } from "@getpaseo/plugin/client";
 import { useToast } from "@getpaseo/plugin/client/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getOwnerFilter, type Mentions, type OwnerFilter, type Overview, repoOwner, setOwnerFilter } from "../shared/rpc";
+import { getOwnerFilter, type Mentions, type Merged, type OwnerFilter, type Overview, repoOwner, setOwnerFilter } from "../shared/rpc";
 
 const FILTER_KEY = ["github-prs", "owner-filter"] as const;
 
@@ -61,11 +61,22 @@ export function filterMentions(data: Mentions | undefined, filter: Filter): Ment
   return { ...data, mentions: data.mentions.filter((mention) => filter.matches(mention.target.repo)) };
 }
 
-export function ownersIn(overview: Overview | undefined, mentions: Mentions | undefined, filter: Filter): string[] {
+export function filterMerged(data: Merged | undefined, filter: Filter): Merged | undefined {
+  if (!data || !filter.active) return data;
+  return { ...data, prs: data.prs.filter((pr) => filter.matches(pr.repo)) };
+}
+
+export function ownersIn(
+  overview: Overview | undefined,
+  mentions: Mentions | undefined,
+  merged: Merged | undefined,
+  filter: Filter,
+): string[] {
   const repos = [
     ...(overview?.mine ?? []).map((pr) => pr.repo),
     ...(overview?.reviews ?? []).map((pr) => pr.repo),
     ...(mentions?.mentions ?? []).map((mention) => mention.target.repo),
+    ...(merged?.prs ?? []).map((pr) => pr.repo),
   ];
   const byKey = new Map<string, string>();
   for (const owner of [...filter.owners, ...repos.map(repoOwner)]) {

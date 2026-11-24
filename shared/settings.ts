@@ -18,6 +18,9 @@ export const NIGHTLY_REVIEW_TITLE = "GitHub PRs nightly review";
 
 export const DEFAULT_REVIEW_QUERIES = ["review-requested:@me", "reviewed-by:@me"];
 
+export const DEFAULT_STAGING_BRANCHES = ["stage", "staging"];
+export const DEFAULT_PRODUCTION_BRANCHES = ["prod", "production"];
+
 export const preferences = defineSettings({
   id: "preferences",
   scope: "host",
@@ -48,6 +51,9 @@ export const preferences = defineSettings({
     followUpPrompt: z.string().default(DEFAULT_FOLLOW_UP_PROMPT),
     cloneDirectory: z.string().default(""),
     nightlyStaggerMinutes: z.number().int().min(1).max(60).default(10),
+    mergedDays: z.number().int().min(1).max(90).default(14),
+    stagingBranches: z.array(z.string()).default(DEFAULT_STAGING_BRANCHES),
+    productionBranches: z.array(z.string()).default(DEFAULT_PRODUCTION_BRANCHES),
   }),
 });
 

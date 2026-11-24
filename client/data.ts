@@ -3,9 +3,12 @@ import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-quer
 import { useEffect } from "react";
 import {
   getMentions,
+  getMerged,
   getOverview,
   type MentionSection,
   type Mentions,
+  type Merged,
+  type MergedSection,
   type MySection,
   type Overview,
   type ReviewSection,
@@ -14,6 +17,7 @@ import { preferences } from "../shared/settings";
 
 export const OVERVIEW_KEY = ["github-prs", "overview"] as const;
 export const MENTIONS_KEY = ["github-prs", "mentions"] as const;
+export const MERGED_KEY = ["github-prs", "merged"] as const;
 export const AUTH_KEY = ["github-prs", "auth"] as const;
 
 function usePolling() {
@@ -56,12 +60,20 @@ export function useMentions() {
   return useCachedQuery(MENTIONS_KEY, useRpc(getMentions));
 }
 
+export function useMerged() {
+  return useCachedQuery(MERGED_KEY, useRpc(getMerged));
+}
+
 export function reviewCount(data: Overview | undefined): number {
   return data?.reviews.filter((pr) => pr.section === "ready" || pr.section === "rereview").length ?? 0;
 }
 
 export function mentionCount(data: Mentions | undefined): number {
   return data?.mentions.filter((mention) => mention.section === "unanswered").length ?? 0;
+}
+
+export function unreleasedCount(data: Merged | undefined): number {
+  return data?.prs.filter((pr) => pr.section === "merged" || pr.section === "staging").length ?? 0;
 }
 
 export function attentionCount(overview: Overview | undefined, mentions: Mentions | undefined): number {
@@ -97,6 +109,14 @@ export const MENTION_SECTIONS: SectionInfo<MentionSection>[] = [
   { id: "unanswered", title: "Needs your reply", collapsed: false },
   { id: "answered", title: "Replied, reacted or resolved", collapsed: true },
   { id: "done", title: "Marked done", collapsed: true },
+];
+
+export const MERGED_SECTIONS: SectionInfo<MergedSection>[] = [
+  { id: "merged", title: "Not on staging or production yet", collapsed: false },
+  { id: "staging", title: "On staging, not on production", collapsed: false },
+  { id: "unchecked", title: "Could not be checked", collapsed: false },
+  { id: "production", title: "On production", collapsed: true },
+  { id: "untracked", title: "No staging or production branch", collapsed: true },
 ];
 
 export function timeAgo(iso: string, now = Date.now()): string {

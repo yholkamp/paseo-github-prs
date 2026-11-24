@@ -16,15 +16,17 @@ import { Text } from "react-native";
 import { type AuthStatus, clearToken, getAuthStatus, saveToken } from "../shared/rpc";
 import {
   DEFAULT_FOLLOW_UP_PROMPT,
+  DEFAULT_PRODUCTION_BRANCHES,
   DEFAULT_READY_PATTERN,
   DEFAULT_REVIEW_PROMPT,
   DEFAULT_REVIEW_PROVIDER,
   DEFAULT_REVIEW_QUERIES,
+  DEFAULT_STAGING_BRANCHES,
   isValidPattern,
   NIGHTLY_REVIEW_TITLE,
   preferences,
 } from "../shared/settings";
-import { AUTH_KEY, MENTIONS_KEY, OVERVIEW_KEY } from "./data";
+import { AUTH_KEY, MENTIONS_KEY, MERGED_KEY, OVERVIEW_KEY } from "./data";
 
 type Preferences = ReturnType<typeof preferences.schema.parse>;
 
@@ -66,6 +68,13 @@ const ACTIVITY_WEEK_OPTIONS = [
   { label: "Any time", value: "0" },
 ];
 
+function branchNames(text: string): string[] {
+  return text
+    .split(",")
+    .map((branch) => branch.trim())
+    .filter(Boolean);
+}
+
 function describeAuth(status: AuthStatus | undefined): { text: string; error: string | null } {
   if (!status) return { text: "Checking…", error: null };
   if (status.source === "none") return { text: "No token found", error: null };
@@ -87,6 +96,7 @@ function TokenSettings() {
     queryClient.setQueryData(AUTH_KEY, next);
     void queryClient.invalidateQueries({ queryKey: OVERVIEW_KEY });
     void queryClient.invalidateQueries({ queryKey: MENTIONS_KEY });
+    void queryClient.invalidateQueries({ queryKey: MERGED_KEY });
   };
   const save = useMutation({
     mutationFn: saveTokenRpc,
@@ -237,7 +247,7 @@ function PreferencesForm({
           />
           <SettingsSwitch
             label="Skip pull requests others are reviewing"
-            hint="Pull requests you have not reviewed where another person already left a review move to Others reviewing and are not counted. You still see mentions."
+            hint="Pull requests you have not reviewed where another person already left a review, or a comment mentions someone other than you, move to Others reviewing and are not counted. You still see mentions."
             value={draft.skipOthersReviewing}
             onValueChange={(skipOthersReviewing) => setDraft({ ...draft, skipOthersReviewing })}
           />
@@ -263,6 +273,32 @@ function PreferencesForm({
             hint="Skips comments from bot accounts such as the review bot."
             value={draft.mentionsHideBots}
             onValueChange={(mentionsHideBots) => setDraft({ ...draft, mentionsHideBots })}
+          />
+        </SettingsCard>
+      </SettingsSection>
+
+      <SettingsSection title="Merged pull requests">
+        <SettingsCard>
+          <SettingsSelect
+            label="Look back"
+            hint="Pull requests you merged longer ago than this are not listed."
+            value={String(draft.mergedDays)}
+            options={MENTION_DAY_OPTIONS}
+            onValueChange={(value) => setDraft({ ...draft, mergedDays: Number(value) })}
+          />
+          <SettingsInput
+            label="Staging branches"
+            hint="Comma-separated branch names. The first one that exists in a repository is checked for the merge commit."
+            initialValue={values.stagingBranches.join(", ")}
+            placeholder={DEFAULT_STAGING_BRANCHES.join(", ")}
+            onChangeText={(text) => setDraft({ ...draft, stagingBranches: branchNames(text) })}
+          />
+          <SettingsInput
+            label="Production branches"
+            hint="Comma-separated branch names. The first one that exists in a repository is checked for the merge commit."
+            initialValue={values.productionBranches.join(", ")}
+            placeholder={DEFAULT_PRODUCTION_BRANCHES.join(", ")}
+            onChangeText={(text) => setDraft({ ...draft, productionBranches: branchNames(text) })}
           />
         </SettingsCard>
       </SettingsSection>

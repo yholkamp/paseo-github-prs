@@ -2,7 +2,7 @@ import type { PluginSettings } from "@getpaseo/plugin/server";
 import type { Mention, Mentions } from "../shared/rpc";
 import { preferences } from "../shared/settings";
 import { cacheKey, SharedCache } from "./cache";
-import { normalizeLogin } from "./classify";
+import { normalizeLogin, stripNoise } from "./classify";
 import { type RawAuthor, type RawMentionTarget, searchMentions } from "./github";
 import { readConfigFile, writeConfigFile } from "./storage";
 import { resolveToken } from "./token";
@@ -21,14 +21,6 @@ const EXCERPT_LENGTH = 280;
 
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function stripNoise(body: string): string {
-  return body
-    .replace(/<!--[\s\S]*?-->/g, "")
-    .split("\n")
-    .filter((line) => !/^\s*>/.test(line))
-    .join("\n");
 }
 
 function excerpt(body: string, pattern: RegExp): string {
