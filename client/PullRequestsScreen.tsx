@@ -1,6 +1,6 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import type { PluginScreenProps } from "@getpaseo/plugin/client";
-import { Icon, Loading } from "@getpaseo/plugin/client/ui";
+import { Icon, Loading, TextInput } from "@getpaseo/plugin/client/ui";
 import { useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import type { PullRequest } from "../shared/rpc";
@@ -17,7 +17,7 @@ import {
   useMerged,
   useOverview,
 } from "./data";
-import { type Filter, filterMentions, filterMerged, filterOverview, ownersIn, useOwnerFilter } from "./filter";
+import { type Filter, filterMentions, filterMerged, filterOverview, ownersIn, searchWords, useOwnerFilter } from "./filter";
 import { MentionsList } from "./Mentions";
 import { MergedList } from "./Merged";
 import { type Reviews, useReviews } from "./review";
@@ -187,6 +187,39 @@ function OwnerFilterBar({ owners, filter, styles }: { owners: string[]; filter: 
   );
 }
 
+function SearchField({
+  value,
+  onChange,
+  theme,
+  styles,
+}: {
+  value: string;
+  onChange(value: string): void;
+  theme: PluginTheme;
+  styles: Styles;
+}) {
+  return (
+    <View style={styles.search}>
+      <Icon name="Search" size={14} color={theme.colors.foregroundMuted} />
+      <TextInput
+        accessibilityLabel="Search pull requests by title or repository"
+        placeholder="Search by title or repository"
+        placeholderTextColor={theme.colors.foregroundMuted}
+        value={value}
+        onChangeText={onChange}
+        autoCapitalize="none"
+        autoCorrect={false}
+        style={styles.searchInput}
+      />
+      {value ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="Clear search" onPress={() => onChange("")} style={styles.searchClear}>
+          <Icon name="X" size={14} color={theme.colors.foregroundMuted} />
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 function PullRequestList({
   prs,
   sections,
@@ -208,7 +241,7 @@ function PullRequestList({
     return (
       <Text style={styles.empty}>
         {filtered
-          ? "Nothing here for the selected organizations."
+          ? "No pull requests match your filters."
           : tab === "mine"
             ? "You have no open pull requests."
             : "Nothing in your review queue."}
@@ -250,10 +283,13 @@ export function PullRequestsScreen({ theme, layout, params, navigation, openSett
   const mentions = useMentions();
   const merged = useMerged();
   const filter = useOwnerFilter();
+  const [search, setSearch] = useState("");
+  const words = searchWords(search);
+  const filtered = filter.active || words.length > 0;
   const active = tab === "mentions" ? mentions : tab === "merged" ? merged : overview;
-  const overviewData = filterOverview(overview.data, filter);
-  const mentionsData = filterMentions(mentions.data, filter);
-  const mergedData = filterMerged(merged.data, filter);
+  const overviewData = filterOverview(overview.data, filter, words);
+  const mentionsData = filterMentions(mentions.data, filter, words);
+  const mergedData = filterMerged(merged.data, filter, words);
 
   if (overview.isPending && mentions.isPending) {
     return <Loading />;
@@ -305,6 +341,8 @@ export function PullRequestsScreen({ theme, layout, params, navigation, openSett
 
       <OwnerFilterBar owners={ownersIn(overview.data, mentions.data, merged.data, filter)} filter={filter} styles={styles} />
 
+      <SearchField value={search} onChange={setSearch} theme={theme} styles={styles} />
+
       <View style={styles.tabs} accessibilityRole="tablist">
         {tabs.map(([id, label]) => (
           <Pressable
@@ -333,15 +371,15 @@ export function PullRequestsScreen({ theme, layout, params, navigation, openSett
       {active.isPending ? (
         <Loading />
       ) : tab === "mentions" ? (
-        mentionsData ? <MentionsList data={mentionsData} filtered={filter.active} theme={theme} styles={styles} /> : null
+        mentionsData ? <MentionsList data={mentionsData} filtered={filtered} theme={theme} styles={styles} /> : null
       ) : tab === "merged" ? (
-        mergedData ? <MergedList data={mergedData} filtered={filter.active} theme={theme} styles={styles} /> : null
+        mergedData ? <MergedList data={mergedData} filtered={filtered} theme={theme} styles={styles} /> : null
       ) : overviewData ? (
         <PullRequestList
           prs={tab === "mine" ? overviewData.mine : overviewData.reviews}
           sections={tab === "mine" ? MY_SECTIONS : REVIEW_SECTIONS}
           tab={tab}
-          filtered={filter.active}
+          filtered={filtered}
           reviews={reviews}
           theme={theme}
           styles={styles}

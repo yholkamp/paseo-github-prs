@@ -59,7 +59,7 @@ export function MergedList({
   if (data.prs.length === 0) {
     return (
       <Text style={styles.empty}>
-        {filtered ? "No merged pull requests for the selected organizations." : "You merged no pull requests in the selected period."}
+        {filtered ? "No merged pull requests match your filters." : "You merged no pull requests in the selected period."}
       </Text>
     );
   }

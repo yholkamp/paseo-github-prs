@@ -123,7 +123,7 @@ export function MentionsList({
   if (data.mentions.length === 0) {
     return (
       <Text style={styles.empty}>
-        {filtered ? "No mentions for the selected organizations." : "No mentions in the selected period."}
+        {filtered ? "No mentions match your filters." : "No mentions in the selected period."}
       </Text>
     );
   }

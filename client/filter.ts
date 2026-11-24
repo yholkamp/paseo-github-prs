@@ -47,23 +47,35 @@ export function useOwnerFilter(): Filter {
   };
 }
 
-export function filterOverview(data: Overview | undefined, filter: Filter): Overview | undefined {
-  if (!data || !filter.active) return data;
+export function searchWords(query: string): string[] {
+  return query.toLowerCase().split(/\s+/).filter(Boolean);
+}
+
+function matchesSearch(words: string[], title: string, repo: string): boolean {
+  if (words.length === 0) return true;
+  const haystack = `${repo}\n${title}`.toLowerCase();
+  return words.every((word) => haystack.includes(word));
+}
+
+export function filterOverview(data: Overview | undefined, filter: Filter, words: string[] = []): Overview | undefined {
+  if (!data || (!filter.active && words.length === 0)) return data;
+  const keep = (pr: Overview["mine"][number]) => filter.matches(pr.repo) && matchesSearch(words, pr.title, pr.repo);
+  return { ...data, mine: data.mine.filter(keep), reviews: data.reviews.filter(keep) };
+}
+
+export function filterMentions(data: Mentions | undefined, filter: Filter, words: string[] = []): Mentions | undefined {
+  if (!data || (!filter.active && words.length === 0)) return data;
   return {
     ...data,
-    mine: data.mine.filter((pr) => filter.matches(pr.repo)),
-    reviews: data.reviews.filter((pr) => filter.matches(pr.repo)),
+    mentions: data.mentions.filter(
+      ({ target }) => filter.matches(target.repo) && matchesSearch(words, target.title, target.repo),
+    ),
   };
 }
 
-export function filterMentions(data: Mentions | undefined, filter: Filter): Mentions | undefined {
-  if (!data || !filter.active) return data;
-  return { ...data, mentions: data.mentions.filter((mention) => filter.matches(mention.target.repo)) };
-}
-
-export function filterMerged(data: Merged | undefined, filter: Filter): Merged | undefined {
-  if (!data || !filter.active) return data;
-  return { ...data, prs: data.prs.filter((pr) => filter.matches(pr.repo)) };
+export function filterMerged(data: Merged | undefined, filter: Filter, words: string[] = []): Merged | undefined {
+  if (!data || (!filter.active && words.length === 0)) return data;
+  return { ...data, prs: data.prs.filter((pr) => filter.matches(pr.repo) && matchesSearch(words, pr.title, pr.repo)) };
 }
 
 export function ownersIn(
