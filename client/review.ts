@@ -12,6 +12,7 @@ import {
   reviewKey,
   startReview,
 } from "../shared/rpc";
+import { WORKSPACES_KEY } from "./WorkspaceBadge";
 
 const REVIEW_JOBS_KEY = ["github-prs", "review-jobs"] as const;
 
@@ -72,6 +73,7 @@ export function useReviews(navigation: PluginScreenProps["navigation"]): Reviews
   useEffect(() => {
     for (const job of jobs.data?.jobs ?? []) {
       if (job.state === "running" || !started.current.delete(job.id)) continue;
+      void queryClient.invalidateQueries({ queryKey: WORKSPACES_KEY });
       if (job.state === "failed") {
         toast.error(`Review failed: ${job.error ?? "unknown error"}`);
         continue;

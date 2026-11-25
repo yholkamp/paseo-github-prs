@@ -18,6 +18,12 @@ Each pull request in the To review list has a Review button. It finds your local
 
 The plugin remembers which workspace, agent and commit each review used, in `~/.config/paseo-github-prs/reviews.json` on the daemon machine, for 90 days. A reviewed pull request shows Open review while its head commit is the one that was reviewed. Once new commits are pushed it shows Re-review, which fast-forwards the same workspace and asks the same agent to review the new commits, so it can check whether the issues it raised were addressed. When that workspace or agent was archived, a fresh review starts instead. Pull requests from forks are checked out as a local `pr-<number>` branch.
 
+Review workspaces and agents also carry the repository, pull request number and reviewed commit in their Paseo metadata, so the link to the pull request survives renaming the branch or the workspace.
+
+## Sidebar badges
+
+Workspaces in the sidebar whose branch belongs to one of your open pull requests or one in your review queue show its status on the line under the title, for example Failing, Conflict, 3 new, Mergeable, Review or Re-review. The status comes from the same data as the Pull requests screen and refreshes with it. Hide the badges from the sidebar's Show menu.
+
 ## Merged
 
 Pull requests you authored and merged in the last 14 days (7 to 90 days in settings) are grouped into not on staging or production yet, on staging but not on production, on production, and repositories without a staging or production branch. For each repository the plugin looks for the first existing staging branch (default `stage`, then `staging`) and production branch (default `prod`, then `production`) and checks whether that branch contains the pull request's merge commit. This works when the environment branches are fast-forwarded or merged from the main branch; when promotions are squash merged, the original commits are never contained and pull requests stay in the earlier group. Pull requests whose head branch is one of the environment branches, such as promotion pull requests from stage to prod, are left out. The tab count is the number not yet on production. At most 50 merged pull requests are listed.

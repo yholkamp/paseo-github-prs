@@ -1,18 +1,25 @@
-import type { PluginHandlerContext, PluginSettings } from "@getpaseo/plugin/server";
+import type { PluginSettings } from "@getpaseo/plugin/server";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import { type ReviewJob, reviewKey, type ReviewRecord, reviewRecord, type ReviewTarget } from "../shared/rpc";
+import {
+  PR_METADATA_KEY,
+  type PrMetadata,
+  type ReviewJob,
+  reviewKey,
+  type ReviewRecord,
+  reviewRecord,
+  type ReviewTarget,
+} from "../shared/rpc";
 import { preferences } from "../shared/settings";
 import { type GitHubRemote, git, githubRemotes, gitOk, parseGitHubRepo } from "./git";
 import { readConfigFile, writeConfigFile } from "./storage";
+import { listGitWorkspaces, type Paseo, type Workspace } from "./workspaces";
 
-type Paseo = PluginHandlerContext["paseo"];
 type Preferences = PluginSettings<typeof preferences.schema>;
-type Workspace = Awaited<ReturnType<Paseo["workspaces"]["list"]>>["entries"][number];
 
 interface Job extends ReviewJob {
   finishedAt: number | null;
@@ -136,11 +143,9 @@ async function findWorkspace(
   target: ReviewTarget,
   branch: string,
 ): Promise<Workspace | null> {
-  let cursor: string | undefined;
-  for (let page = 0; page < 10; page++) {
-    const result = await paseo.workspaces.list({ page: { limit: 200, ...(cursor ? { cursor } : {}) } });
-    const match = result.entries.find((workspace) => {
-      if (workspace.archivingAt || workspace.projectKind !== "git") return false;
+  const workspaces = await listGitWorkspaces(paseo);
+  return (
+    workspaces.find((workspace) => {
       const repoMatches =
         workspace.projectRootPath === located.root ||
         sameRepo(parseGitHubRepo(workspace.gitRuntime?.remoteUrl ?? ""), target.repo);
@@ -149,12 +154,16 @@ async function findWorkspace(
         workspace.gitRuntime?.currentBranch === branch ||
         workspace.githubRuntime?.pullRequest?.number === target.number
       );
-    });
-    if (match) return match;
-    if (!result.pageInfo.hasMore || !result.pageInfo.nextCursor) return null;
-    cursor = result.pageInfo.nextCursor;
-  }
-  return null;
+    }) ?? null
+  );
+}
+
+function prMetadata(target: ReviewTarget, headSha?: string): PrMetadata {
+  return { repo: target.repo, number: target.number, url: target.url, ...(headSha ? { headSha } : {}) };
+}
+
+function logMetadataError(error: unknown): void {
+  console.error(`Could not store pull request metadata: ${error instanceof Error ? error.message : String(error)}`);
 }
 
 async function liveWorkspace(paseo: Paseo, id: string): Promise<Workspace | null> {
@@ -234,12 +243,14 @@ async function runReview(job: Job, target: ReviewTarget, paseo: Paseo, settings:
     await updateWorkspace(directory, trackingRef, job.warnings);
     workspace = paseo.workspaces.ref(existing.id);
     reviewedSha = await git(directory, ["rev-parse", "HEAD"]);
+    await workspace.setMetadata({ [PR_METADATA_KEY]: prMetadata(target) }).catch(logMetadataError);
   } else {
     await prepareBranch(located.root, branch, trackingRef, job.warnings);
     job.step = "Creating worktree";
     workspace = await paseo.workspaces.create({
       title: `Review #${target.number}: ${target.title}`.slice(0, 80),
       source: { kind: "worktree", cwd: located.root, action: "checkout", refName: branch },
+      metadata: { [PR_METADATA_KEY]: prMetadata(target) },
     });
     reviewedSha = await git(located.root, ["rev-parse", `refs/heads/${branch}`]);
   }
@@ -260,6 +271,7 @@ async function runReview(job: Job, target: ReviewTarget, paseo: Paseo, settings:
       }),
     );
     job.outcome = "follow_up";
+    await previousAgent.setMetadata({ [PR_METADATA_KEY]: prMetadata(target, reviewedSha) }).catch(logMetadataError);
   } else {
     job.step = "Starting review agent";
     const modeId = await autoModeId(paseo, prefs.reviewProvider);
@@ -267,6 +279,7 @@ async function runReview(job: Job, target: ReviewTarget, paseo: Paseo, settings:
       config: { provider: prefs.reviewProvider, ...(modeId ? { modeId } : {}) },
       title: `Code review #${target.number}`,
       prompt: renderPrompt(prefs.reviewPrompt, target, branch),
+      metadata: { [PR_METADATA_KEY]: prMetadata(target, reviewedSha) },
     });
     job.agentId = agent.id;
     job.outcome = existing ? "existing_workspace" : "new_workspace";

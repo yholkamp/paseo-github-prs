@@ -246,3 +246,29 @@ export const clearToken = defineRpc({
   input: z.object({}),
   output: authStatus,
 });
+
+export const PR_METADATA_KEY = "github-prs.pr";
+
+export const prMetadata = z.object({
+  repo: z.string(),
+  number: z.number(),
+  url: z.string(),
+  headSha: z.string().optional(),
+});
+
+export type PrMetadata = z.infer<typeof prMetadata>;
+
+export const workspacePullRequest = z.object({
+  workspaceId: z.string(),
+  repo: z.string(),
+  number: z.number().nullable(),
+  branch: z.string().nullable(),
+});
+
+export type WorkspacePullRequest = z.infer<typeof workspacePullRequest>;
+
+export const listWorkspacePullRequests = defineRpc({
+  name: "github.workspaces",
+  input: z.object({}),
+  output: z.object({ workspaces: z.array(workspacePullRequest) }),
+});

@@ -7,6 +7,7 @@ import { startNightlyReviews, stopNightlyReviews } from "./server/nightly";
 import { authStatus, loadOverview } from "./server/overview";
 import { currentReviewJobs, currentReviewRecords, startReviewJob } from "./server/review";
 import { deleteStoredToken, storeToken } from "./server/token";
+import { listWorkspacePullRequests as loadWorkspacePullRequests } from "./server/workspaces";
 import {
   clearToken,
   getAuthStatus,
@@ -15,6 +16,7 @@ import {
   getOverview,
   getOwnerFilter,
   listReviewJobs,
+  listWorkspacePullRequests,
   saveToken,
   setMentionsDone,
   setOwnerFilter,
@@ -33,6 +35,9 @@ export default function contribute(server: PluginServerContext) {
   server.handle(setOwnerFilter, (filter) => saveOwnerFilter(filter));
   server.handle(startReview, (target, { paseo }) => startReviewJob(target, paseo, settings));
   server.handle(listReviewJobs, async () => ({ jobs: currentReviewJobs(), reviews: await currentReviewRecords() }));
+  server.handle(listWorkspacePullRequests, async (_input, { paseo }) => ({
+    workspaces: await loadWorkspacePullRequests(paseo),
+  }));
   server.handle(getAuthStatus, () => authStatus());
   server.handle(saveToken, async ({ token }) => {
     await fetchViewer(token.trim());
@@ -44,7 +49,7 @@ export default function contribute(server: PluginServerContext) {
     return authStatus();
   });
 
-  server.on("agent.created", async ({ agent }, { paseo }) => {
+  server.addHook("agent.create.after", async ({ agent }, { paseo }) => {
     if (agent.title?.trim() !== NIGHTLY_REVIEW_TITLE) return;
     const snapshot = await paseo.agents.ref(agent.id).refresh().catch(() => null);
     if (!snapshot?.agent.labels?.["paseo.schedule-id"]) return;

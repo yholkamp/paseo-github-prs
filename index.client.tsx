@@ -2,6 +2,7 @@ import type { PluginClientContext, PluginScreenProps } from "@getpaseo/plugin/cl
 import { PullRequestsScreen } from "./client/PullRequestsScreen";
 import { SettingsScreen } from "./client/SettingsScreen";
 import { PullRequestsSidebarItem } from "./client/SidebarItem";
+import { PullRequestBadge } from "./client/WorkspaceBadge";
 
 export default function contribute(client: PluginClientContext) {
   const openSettings = () => client.openSettings("github");
@@ -12,6 +13,12 @@ export default function contribute(client: PluginClientContext) {
     Component: (props: PluginScreenProps) => <PullRequestsScreen {...props} openSettings={openSettings} />,
   });
   client.addSidebarHeaderItem({ id: "pull-requests", title: "Pull requests", Component: PullRequestsSidebarItem });
+  client.addWorkspaceRowBadgeItem?.({
+    id: "pull-request-status",
+    title: "Pull request status",
+    icon: "GitPullRequest",
+    Component: PullRequestBadge,
+  });
   client.addSettingsScreen({ id: "github", title: "GitHub PRs", icon: "GitPullRequest", Component: SettingsScreen });
   client.addCommandCenterItem({
     id: "open-pull-requests",
